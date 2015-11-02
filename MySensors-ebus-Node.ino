@@ -14,83 +14,53 @@
 #define NODE_VERSION  "0.4"
 
 #define RECEIVE_PIN   A0
-int packetBytes = 0;
-byte packet[128];
-
-void ReconstructTelegram()
-{
-  for (int i=0;i<packetBytes;i++)
-  {
-    if (packet[i] == 0xA9)
-    {
-      if (packet[i+1] == 0x01)
-      {
-        packet[i] = 0xAA;
-      }
-      for (int j=i+1; j<packetBytes-1;j++)
-      {
-        packet[j] = packet[j+1];
-      }
-    }
-  }
-}
+#define TRANSMIT_PIN  11
+#define REFRESH_INTERVAL 3600000  // Every hour
 
 // VTT wordt 90 als de ketel aanslaat.
 // VT en NT gaan dan oplopen
-const int SENSOR_VTT = 1;
-float vtt = 0;
-const int SENSOR_VT = 3;
-float vt = 0;
-const int SENSOR_NTT = 2; // bestaat niet
-float ntt = 0;
-const int SENSOR_NT = 4;
-float nt = 0;
-const int SENSOR_WTT = 5;
-float wtt = 0;
-const int SENSOR_WT = 6;
-float wt = 0;
-const int SENSOR_STT = 7;
-float stt = 0;
-const int SENSOR_ST = 8;
-float st = 0;
-const int SENSOR_HEATING = 9;
-bool heating = false;
-const int SENSOR_WATER = 10;
-bool water = false;
-const int SENSOR_MODEL = 11;
-const int SENSOR_HOT_WATER_PUMP = 12;
-byte hotWaterPump = false;
-const int SENSOR_PUMP = 13;
-byte pump = 0;
+#define SENSOR_VTT 1
+#define SENSOR_VT 3
+#define SENSOR_NT 4
+#define SENSOR_WTT 5
+#define SENSOR_WT 6
+#define SENSOR_STT 7
+#define SENSOR_ST 8
+#define SENSOR_HEATING 9
+#define SENSOR_WATER 10
+#define SENSOR_MODEL 11
+#define SENSOR_HOT_WATER_PUMP 12
+#define SENSOR_PUMP 13
 
-void ShowValues()
+class CSensor
 {
-  Serial.print("\tVT=");
-  Serial.print(vt, 1);
-  Serial.print("(");
-  Serial.print(vtt,1);
-  Serial.print(") NT=");
-  Serial.print(nt,1);
-  Serial.print(" WT=");
-  Serial.print(wt,1);
-  Serial.print("(");
-  Serial.print(wtt,1);
-  Serial.print(") ST=");
-  Serial.print(st,1);
-  Serial.print("(");
-  Serial.print(stt,1);
-  Serial.print(")\tH=");
-  Serial.print(heating);
-  Serial.print(" W=");
-  Serial.print(water);
-  Serial.print("\tP=");
-  Serial.print(pump);
-  Serial.print(" HWP=");
-  Serial.print(hotWaterPump);
-  Serial.println("");
-}
+private:
+  unsigned long m_Millis;
+protected:
+  const byte    m_ID;
+  const char  * m_Name;
+public:
+  CSensor(byte a_ID, const char * a_Name);
 
-SoftwareSerial mySerial(RECEIVE_PIN, 11); // RX, TX
+  bool NeedsRefresh();
+
+  void Touch();
+};
+
+class CFloatSensor: public CSensor
+{
+private:
+  float m_Value;
+public:
+  CFloatSensor(byte a_ID, const char * a_Name);
+
+  bool SetValue(float a_Value);
+  float Value();
+};
+
+float ProcessData1C(const byte a_Value, CFloatSensor & a_Sensor);
+
+SoftwareSerial mySerial(RECEIVE_PIN, TRANSMIT_PIN); // RX, TX
 // NRFRF24L01 radio driver (set low transmit power by default)
 MyTransportNRF24 radio(RF24_CE_PIN, RF24_CS_PIN, RF24_PA_LEVEL_GW);
 // Select AtMega328 hardware profile
@@ -99,7 +69,21 @@ MyHwATMega328 hw;
 MySensor gw(radio, hw);
 // Initialize temperature message
 
-unsigned long lastRefresh = 0; // The last time the sensors were refreshed.
+int packetBytes = 0;
+byte packet[128];
+
+bool heating = false;
+bool water = false;
+byte pump = 0;
+byte hotWaterPump = false;
+
+CFloatSensor vtt(SENSOR_VTT, "VTT");
+CFloatSensor vt(SENSOR_VT, "VT");
+CFloatSensor nt(SENSOR_NT, "NT");
+CFloatSensor stt(SENSOR_STT, "STT");
+CFloatSensor st(SENSOR_ST, "ST");
+CFloatSensor wtt(SENSOR_WTT, "WTT");
+CFloatSensor wt(SENSOR_WT, "WTT");
 
 void setup()
 {
@@ -108,12 +92,11 @@ void setup()
 
   // Initialize library and add callback for incoming messages
   gw.begin(NULL, NODE_ID, false);
-  Serial.println(NODE_TEXT + " " + NODE_VERSION);
+  Serial.println(NODE_TEXT  " "  NODE_VERSION);
   // Send the sketch version information to the gateway and Controller
   gw.sendSketchInfo(NODE_TEXT, NODE_VERSION);
   gw.present(SENSOR_VT, S_TEMP, "VT");
   gw.present(SENSOR_VTT, S_TEMP, "VTT");
-  gw.present(SENSOR_NTT, S_TEMP, "NTT");
   gw.present(SENSOR_NT, S_TEMP, "NT");
   gw.present(SENSOR_WTT, S_TEMP, "WTT");
   gw.present(SENSOR_WT, S_TEMP, "WT");
@@ -124,11 +107,11 @@ void setup()
   gw.present(SENSOR_MODEL, S_CUSTOM);
 }
 
-float ProcessData1C(byte value, float & current, int sensor, char * name)
+float ProcessData1C(const byte a_Value, CFloatSensor & a_Sensor)
 {
-  float v = value / 2.0;
-  if (v != current)
+  if (a_Sensor.SetValue(a_Value / 2.0))
   {
+    /*
     Serial.print(name);
     Serial.print("=");
     Serial.print(current);
@@ -136,11 +119,8 @@ float ProcessData1C(byte value, float & current, int sensor, char * name)
     Serial.print(v);
     Serial.print(" C");
     Serial.println();
-    current = v;
+    */
     ShowValues();
-    // Send in the new temperature
-    MyMessage msg(sensor, V_TEMP);
-    gw.send(msg.set(current, 1));
   }
 }
 
@@ -279,6 +259,8 @@ byte CalculateCRC(byte* & data, int len )
    return crc;
 }
 
+void ReconstructTelegram();
+
 void loop() // run over and over
 {
   // Alway process incoming messages whenever possible
@@ -347,8 +329,8 @@ void loop() // run over and over
             if (packetBytes >= 16)
             {
               Serial.print("Vaillant Room Controller: "); 
-              ProcessData1C(packet[7], vtt, SENSOR_VTT, "VTT");
-              ProcessData1C(packet[8], stt, SENSOR_STT, "STT");
+              ProcessData1C(packet[7], vtt);
+              ProcessData1C(packet[8], stt);
               Serial.println();
             }
           }
@@ -357,17 +339,17 @@ void loop() // run over and over
             if (packet[5] == 0x01)
             {
               Serial.println("Vaillant Burner Control Unit - block 1"); 
-              ProcessData1C(packet[9], vt, SENSOR_VT, "VT");
-              ProcessData1C(packet[10], nt, SENSOR_NT, "NT");
-              ProcessData1C(packet[12], wt, SENSOR_WT, "WT");
-              ProcessData1C(packet[13], st, SENSOR_ST, "ST");
+              ProcessData1C(packet[9], vt);
+              ProcessData1C(packet[10], nt);
+              ProcessData1C(packet[12], wt);
+              ProcessData1C(packet[13], st);
               ProcessDataBit(packet[14], 0, heating, SENSOR_HEATING, "H");
               ProcessDataBit(packet[14], 1, water, SENSOR_WATER, "W");
             }
             if (packet[5] == 0x02)
             {
               Serial.println("Vaillant Burner Control Unit - block 2"); 
-              ProcessData1C(packet[13], wtt, SENSOR_WTT, "WTT");
+              ProcessData1C(packet[13], wtt);
             }
           }
           else if (packet[3] == 0x12)
@@ -475,3 +457,94 @@ void loop() // run over and over
   }
 }
 
+void ReconstructTelegram()
+{
+  for (int i=0;i<packetBytes;i++)
+  {
+    if (packet[i] == 0xA9)
+    {
+      if (packet[i+1] == 0x01)
+      {
+        packet[i] = 0xAA;
+      }
+      for (int j=i+1; j<packetBytes-1;j++)
+      {
+        packet[j] = packet[j+1];
+      }
+    }
+  }
+}
+
+void ShowValues()
+{
+  Serial.print("\tVT=");
+  Serial.print(vtt.Value(), 1);
+  Serial.print("(");
+  Serial.print(vtt.Value(),1);
+  Serial.print(") NT=");
+  Serial.print(nt.Value(),1);
+  Serial.print(" WT=");
+  Serial.print(wt.Value(),1);
+  Serial.print("(");
+  Serial.print(wtt.Value(),1);
+  Serial.print(") ST=");
+  Serial.print(st.Value(),1);
+  Serial.print("(");
+  Serial.print(stt.Value(),1);
+  Serial.print(")\tH=");
+  Serial.print(heating);
+  Serial.print(" W=");
+  Serial.print(water);
+  Serial.print("\tP=");
+  
+  Serial.print(pump);
+  Serial.print(" HWP=");
+  Serial.print(hotWaterPump);
+  Serial.println("");
+}
+
+CSensor::CSensor(byte a_ID, const char * a_Name) :
+  m_ID(a_ID),
+  m_Name(a_Name)
+{
+}
+
+bool CSensor::NeedsRefresh()
+{
+  unsigned long now = millis();
+  if ((m_Millis - now) > REFRESH_INTERVAL)
+  {
+    return true;
+  };
+  return false;
+}
+
+void CSensor::Touch()
+{
+  m_Millis = millis();
+}
+
+CFloatSensor::CFloatSensor(byte a_ID, const char * a_Name) :
+  CSensor(a_ID, a_Name)
+{
+  m_Value = 0;
+}
+
+bool CFloatSensor::SetValue(float a_Value)
+{
+  if ((a_Value != m_Value) || NeedsRefresh())
+  {
+    m_Value = a_Value;
+    // Send in the new temperature
+    MyMessage msg(m_ID, V_TEMP);
+    gw.send(msg.set(m_Value, 1));
+    Touch();
+    return true;
+  }
+  return false;
+}
+
+float CFloatSensor::Value()
+{
+  return m_Value; 
+}
