@@ -305,23 +305,23 @@ void loop() // run over and over
           // Vaillant
           if (packet[3] == 0x04)
           {
-            if (packetBytes >= 19)
+            if (packet[5] == 0x01)
             {
-              if (packet[5] == 0x01)
+              if (packetBytes >= 11)
               {
-                Serial.print("Vaillant Get Operating Mode: TV"); 
-                Serial.print(packet[9], HEX);
-                Serial.print(" op.mode=");
-                Serial.println(packet[10], HEX);
+                  Serial.print("Vaillant Get Operating Mode: TV"); 
+                  Serial.print(packet[9], HEX);
+                  Serial.print(" op.mode=");
+                  Serial.println(packet[10], HEX);
               }
-              else if (packet[5] == 0x00)
-              {
-                Serial.println("Vaillant Get Operational Data - data/time");
-              }
-              else
-              {
-                Serial.println("Vaillant Get Operational Data - unhandled block");
-              }
+            }
+            else if (packet[5] == 0x00)
+            {
+              Serial.println("Vaillant Get Operational Data - data/time");
+            }
+            else
+            {
+              Serial.println("Vaillant Get Operational Data - unhandled block");
             }
           }
           else if (packet[3] == 0x10)
