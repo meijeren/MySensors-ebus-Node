@@ -9,6 +9,10 @@
  */
 #include <SoftwareSerial.h>
 
+#define NODE_ID 0xB5
+#define NODE_TEXT "Vaillant ebus node"
+#define NODE_VERSION ""
+
 int packetBytes = 0;
 byte packet[128];
 
@@ -94,7 +98,7 @@ MyHwATMega328 hw;
 MySensor gw(radio, hw);
 // Initialize temperature message
 
-
+unsigned long lastRefresh = 0; // The last time the sensors were refreshed.
 
 void setup()
 {
@@ -103,9 +107,9 @@ void setup()
 
   // Initialize library and add callback for incoming messages
   gw.begin(NULL, 0xB5, false);
-  Serial.println("Vaillant ebus node v0.3");
+  Serial.println(NODE_TEXT + " " + NODE_VERSION);
   // Send the sketch version information to the gateway and Controller
-  gw.sendSketchInfo("Vaillant ebus", "0.3");
+  gw.sendSketchInfo(NODE_TEXT, NODE_VERSION);
   gw.present(SENSOR_VTT, S_TEMP, "VTT");
   gw.present(SENSOR_NTT, S_TEMP, "NTT");
   gw.present(SENSOR_VT, S_TEMP, "VT");
@@ -116,7 +120,7 @@ void setup()
   gw.present(SENSOR_ST, S_TEMP, "ST");
   gw.present(SENSOR_HEATING, S_BINARY);
   gw.present(SENSOR_WATER, S_BINARY);
-  //gw.present(SENSOR_MODEL, S_TEXT);
+  gw.present(SENSOR_MODEL, S_CUSTOM);
 }
 
 float ProcessData1C(byte value, float & current, int sensor, char * name)
