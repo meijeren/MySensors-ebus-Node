@@ -9,10 +9,11 @@
  */
 #include <SoftwareSerial.h>
 
-#define NODE_ID 0xB5
-#define NODE_TEXT "Vaillant ebus node"
-#define NODE_VERSION ""
+#define NODE_ID       0xB5
+#define NODE_TEXT     "Vaillant ebus node"
+#define NODE_VERSION  "0.4"
 
+#define RECEIVE_PIN   A0
 int packetBytes = 0;
 byte packet[128];
 
@@ -33,7 +34,7 @@ void ReconstructTelegram()
     }
   }
 }
-const int RECEIVE_PIN = A0;
+
 // VTT wordt 90 als de ketel aanslaat.
 // VT en NT gaan dan oplopen
 const int SENSOR_VTT = 1;
@@ -106,13 +107,13 @@ void setup()
   mySerial.begin(2400);
 
   // Initialize library and add callback for incoming messages
-  gw.begin(NULL, 0xB5, false);
+  gw.begin(NULL, NODE_ID, false);
   Serial.println(NODE_TEXT + " " + NODE_VERSION);
   // Send the sketch version information to the gateway and Controller
   gw.sendSketchInfo(NODE_TEXT, NODE_VERSION);
+  gw.present(SENSOR_VT, S_TEMP, "VT");
   gw.present(SENSOR_VTT, S_TEMP, "VTT");
   gw.present(SENSOR_NTT, S_TEMP, "NTT");
-  gw.present(SENSOR_VT, S_TEMP, "VT");
   gw.present(SENSOR_NT, S_TEMP, "NT");
   gw.present(SENSOR_WTT, S_TEMP, "WTT");
   gw.present(SENSOR_WT, S_TEMP, "WT");
