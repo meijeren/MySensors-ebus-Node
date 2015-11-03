@@ -33,6 +33,8 @@
 #define SENSOR_PUMP 13
 #define SENSOR_EBUS 14
 #define SENSOR_STATE 15
+// TA = Outside temperature
+#define SENSOR_TA 16 
 
 class CSensor
 {
@@ -57,7 +59,9 @@ public:
   float Value();
 };
 
-float ProcessData1C(const byte a_Value, CFloatSensor & a_Sensor);
+float ProcessData1c(const byte a_Offset, CFloatSensor & a_Sensor);
+float ProcessData2b(const byte a_Offset, CFloatSensor & a_Sensor);
+float ProcessData2c(const byte a_Offset, CFloatSensor & a_Sensor);
 
 SoftwareSerial mySerial(RECEIVE_PIN, TRANSMIT_PIN); // RX, TX
 // NRFRF24L01 radio driver (set low transmit power by default)
@@ -83,6 +87,7 @@ CFloatSensor stt(SENSOR_STT, "STT");
 CFloatSensor st(SENSOR_ST, "ST");
 CFloatSensor wtt(SENSOR_WTT, "WTT");
 CFloatSensor wt(SENSOR_WT, "WTT");
+CFloatSensor ta(SENSOR_TA, "TA");
 
 void setup()
 {
@@ -108,9 +113,37 @@ void setup()
   gw.present(SENSOR_STATE, S_CUSTOM);
 }
 
-float ProcessData1C(const byte a_Value, CFloatSensor & a_Sensor)
+float ProcessData2b(const byte a_Offset, CFloatSensor & a_Sensor)
 {
-  if (a_Sensor.SetValue(a_Value / 2.0))
+  float value;
+  if ((packet[a_Offset+1] & 0x80) == 0x80)
+  {
+    value = -packet[a_Offset+1] + ((packet[a_Offset] + 1.0) / 256);
+  }
+  else
+  {
+    value = packet[a_Offset+1] + ((packet[a_Offset] + 1.0) / 256);
+  }
+  a_Sensor.SetValue(value);
+}
+
+float ProcessData2c(const byte a_Offset, CFloatSensor & a_Sensor)
+{
+  float value;
+  if ((packet[a_Offset+1] & 0x80) == 0x80)
+  {
+    value = -packet[a_Offset+1] + ((packet[a_Offset] + 1.0) / 256);
+  }
+  else
+  {
+    value = packet[a_Offset+1] + ((packet[a_Offset] + 1.0) / 256);
+  }
+  a_Sensor.SetValue(value);
+}
+
+float ProcessData1c(const byte a_Offset, CFloatSensor & a_Sensor)
+{
+  if (a_Sensor.SetValue(packet[a_Offset] / 2.0))
   {
     /*
     Serial.print(name);
@@ -260,6 +293,7 @@ byte CalculateCRC(byte* & data, int len )
    return crc;
 }
 
+void ParseVaillantTelegram();
 void ReconstructTelegram();
 
 void loop() // run over and over
@@ -366,8 +400,8 @@ void ParseVaillantTelegram()
     if (packetBytes >= 16)
     {
       Serial.print("Vaillant Room Controller: "); 
-      ProcessData1C(packet[7], vtt);
-      ProcessData1C(packet[8], stt);
+      ProcessData1c(7, vtt);
+      ProcessData1c(8, stt);
       Serial.println();
     }
   }
@@ -376,17 +410,18 @@ void ParseVaillantTelegram()
     if (packet[5] == 0x01)
     {
       Serial.println("Vaillant Burner Control Unit - block 1"); 
-      ProcessData1C(packet[9], vt);
-      ProcessData1C(packet[10], nt);
-      ProcessData1C(packet[12], wt);
-      ProcessData1C(packet[13], st);
-      ProcessDataBit(packet[14], 0, heating, SENSOR_HEATING, "H");
-      ProcessDataBit(packet[14], 1, water, SENSOR_WATER, "W");
+      ProcessData1c(9, vt);
+      ProcessData1c(10, nt);
+      ProcessData2b(11, ta);
+      ProcessData1c(13, wt);
+      ProcessData1c(14, st);
+      ProcessDataBit(packet[15], 0, heating, SENSOR_HEATING, "H");
+      ProcessDataBit(packet[15], 1, water, SENSOR_WATER, "W");
     }
     if (packet[5] == 0x02)
     {
       Serial.println("Vaillant Burner Control Unit - block 2"); 
-      ProcessData1C(packet[13], wtt);
+      ProcessData1c(13, wtt);
     }
     else
     {
@@ -457,7 +492,7 @@ void ParseVaillantTelegram()
       Serial.print(packet[6], HEX);
       Serial.println(); 
     }
-    else if (packet[6] == 0x01)
+    else if (packet[5] == 0x01)
     {
       Serial.println("Vaillant broadcast servce");
     }
@@ -507,7 +542,6 @@ void ShowValues()
   Serial.print(" W=");
   Serial.print(water);
   Serial.print("\tP=");
-  
   Serial.print(pump);
   Serial.print(" HWP=");
   Serial.print(hotWaterPump);
