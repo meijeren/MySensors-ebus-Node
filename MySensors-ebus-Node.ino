@@ -31,6 +31,8 @@
 #define SENSOR_MODEL 11
 #define SENSOR_HOT_WATER_PUMP 12
 #define SENSOR_PUMP 13
+#define SENSOR_EBUS 14
+#define SENSOR_STATE 15
 
 class CSensor
 {
@@ -41,9 +43,7 @@ protected:
   const char  * m_Name;
 public:
   CSensor(byte a_ID, const char * a_Name);
-
   bool NeedsRefresh();
-
   void Touch();
 };
 
@@ -53,7 +53,6 @@ private:
   float m_Value;
 public:
   CFloatSensor(byte a_ID, const char * a_Name);
-
   bool SetValue(float a_Value);
   float Value();
 };
@@ -105,6 +104,8 @@ void setup()
   gw.present(SENSOR_HEATING, S_BINARY);
   gw.present(SENSOR_WATER, S_BINARY);
   gw.present(SENSOR_MODEL, S_CUSTOM);
+  gw.present(SENSOR_EBUS, S_CUSTOM);
+  gw.present(SENSOR_STATE, S_CUSTOM);
 }
 
 float ProcessData1C(const byte a_Value, CFloatSensor & a_Sensor)
@@ -300,131 +301,11 @@ void loop() // run over and over
           return;
         }
         ReconstructTelegram();
+        MyMessage msg(SENSOR_EBUS, V_VAR2);
+        gw.send(msg.set((void*)packet, packetBytes));
         if (packet[2] == 0xB5)
         {
-          // Vaillant
-          if (packet[3] == 0x04)
-          {
-            if (packet[5] == 0x01)
-            {
-              if (packetBytes >= 11)
-              {
-                  Serial.print("Vaillant Get Operating Mode: TV"); 
-                  Serial.print(packet[9], HEX);
-                  Serial.print(" op.mode=");
-                  Serial.println(packet[10], HEX);
-              }
-            }
-            else if (packet[5] == 0x00)
-            {
-              Serial.println("Vaillant Get Operational Data - data/time");
-            }
-            else
-            {
-              Serial.println("Vaillant Get Operational Data - unhandled block");
-            }
-          }
-          else if (packet[3] == 0x10)
-          {
-            if (packetBytes >= 16)
-            {
-              Serial.print("Vaillant Room Controller: "); 
-              ProcessData1C(packet[7], vtt);
-              ProcessData1C(packet[8], stt);
-              Serial.println();
-            }
-          }
-          else if (packet[3] == 0x11)
-          {
-            if (packet[5] == 0x01)
-            {
-              Serial.println("Vaillant Burner Control Unit - block 1"); 
-              ProcessData1C(packet[9], vt);
-              ProcessData1C(packet[10], nt);
-              ProcessData1C(packet[12], wt);
-              ProcessData1C(packet[13], st);
-              ProcessDataBit(packet[14], 0, heating, SENSOR_HEATING, "H");
-              ProcessDataBit(packet[14], 1, water, SENSOR_WATER, "W");
-            }
-            if (packet[5] == 0x02)
-            {
-              Serial.println("Vaillant Burner Control Unit - block 2"); 
-              ProcessData1C(packet[13], wtt);
-            }
-          }
-          else if (packet[3] == 0x12)
-          {
-            Serial.println("Vaillant pump");
-            if ((packet[0] == 0x10) && (packet[1] == 0x08))
-            {
-              // Heater controller
-              //ProcessDataBit(packet[6], 7, hwcp, SENSOR_HWCP, "HWCP");
-              if (packet[5] == 0x00)
-              {
-                switch (packet[6])
-                {
-                case 0x00: 
-                  //Serial.println("hot water circulating pump is off"); 
-                  ProcessDataByte(0, hotWaterPump, SENSOR_HOT_WATER_PUMP, "HWP");
-                  break;
-                case 0x64: 
-                  //Serial.println("hot water circulating pump is on"); 
-                  ProcessDataByte(1, hotWaterPump, SENSOR_HOT_WATER_PUMP, "HWP");
-                  break;
-                }
-              }
-            }
-            if ((packet[0] == 0x03) && (packet[1] == 0x64))
-            {
-              if (packet[5] == 0x02)
-              {
-                switch (packet[6])
-                {
-                case 0x00: 
-                  //Serial.println("internal pump is off"); 
-                  ProcessDataByte(0, pump, SENSOR_PUMP, "P");
-                  break;
-                case 0x64:
-                  //Serial.println("internal pump is operating in the service water circuit"); 
-                  ProcessDataByte(1, pump, SENSOR_PUMP, "P");
-                  break;
-                case 0xFE: 
-                  //Serial.println("internal pump is operating in the heating circuit"); 
-                  ProcessDataByte(2, pump, SENSOR_PUMP, "P");
-                  break;
-                }
-              }
-            }
-          }
-          else if (packet[3] == 0x16)
-          {
-            if (packet[5] == 0x00)
-            {
-              Serial.print("Vaillant Broadcast Service - date / time "); 
-              Serial.print(packet[12], HEX);
-              Serial.print(":");
-              Serial.print(packet[10], HEX);
-              Serial.print(":");
-              Serial.print(packet[9], HEX);
-              Serial.print(" ");
-              Serial.print(packet[11], HEX);
-              Serial.print(" ");
-              Serial.print(packet[8], HEX);
-              Serial.print("-");
-              Serial.print(packet[7], HEX);
-              Serial.print("-");
-              Serial.print(packet[6], HEX);
-              Serial.println(); 
-            }
-            else if (packet[6] == 0x01)
-            {
-              Serial.println("Vaillant broadcast servce");
-            }
-          }
-          else
-          {
-            Serial.println("unhandled Vaillant telegram");
-          }
+          ParseVaillantTelegram();
         }
         else if (packet[2] == 0x07)
         {
@@ -454,6 +335,136 @@ void loop() // run over and over
         packetBytes = 0;
       }
     }
+  }
+}
+
+void ParseVaillantTelegram()
+{
+  if (packet[3] == 0x04)
+  {
+    if (packet[5] == 0x01)
+    {
+      if (packetBytes >= 11)
+      {
+          Serial.print("Vaillant Get Operating Mode: TV"); 
+          Serial.print(packet[9], HEX);
+          Serial.print(" op.mode=");
+          Serial.println(packet[10], HEX);
+      }
+    }
+    else if (packet[5] == 0x00)
+    {
+      Serial.println("Vaillant Get Operational Data - data/time");
+    }
+    else
+    {
+      Serial.println("Vaillant Get Operational Data - unhandled block");
+    }
+  }
+  else if (packet[3] == 0x10)
+  {
+    if (packetBytes >= 16)
+    {
+      Serial.print("Vaillant Room Controller: "); 
+      ProcessData1C(packet[7], vtt);
+      ProcessData1C(packet[8], stt);
+      Serial.println();
+    }
+  }
+  else if (packet[3] == 0x11)
+  {
+    if (packet[5] == 0x01)
+    {
+      Serial.println("Vaillant Burner Control Unit - block 1"); 
+      ProcessData1C(packet[9], vt);
+      ProcessData1C(packet[10], nt);
+      ProcessData1C(packet[12], wt);
+      ProcessData1C(packet[13], st);
+      ProcessDataBit(packet[14], 0, heating, SENSOR_HEATING, "H");
+      ProcessDataBit(packet[14], 1, water, SENSOR_WATER, "W");
+    }
+    if (packet[5] == 0x02)
+    {
+      Serial.println("Vaillant Burner Control Unit - block 2"); 
+      ProcessData1C(packet[13], wtt);
+    }
+    else
+    {
+      Serial.println("Vaillant Burner Control Unit - unhandled block");
+    }
+  }
+  else if (packet[3] == 0x12)
+  {
+    Serial.println("Vaillant pump");
+    if ((packet[0] == 0x10) && (packet[1] == 0x08))
+    {
+      // Heater controller
+      //ProcessDataBit(packet[6], 7, hwcp, SENSOR_HWCP, "HWCP");
+      if (packet[5] == 0x00)
+      {
+        switch (packet[6])
+        {
+        case 0x00: 
+          //Serial.println("hot water circulating pump is off"); 
+          ProcessDataByte(0, hotWaterPump, SENSOR_HOT_WATER_PUMP, "HWP");
+          break;
+        case 0x64: 
+          //Serial.println("hot water circulating pump is on"); 
+          ProcessDataByte(1, hotWaterPump, SENSOR_HOT_WATER_PUMP, "HWP");
+          break;
+        }
+      }
+    }
+    if ((packet[0] == 0x03) && (packet[1] == 0x64))
+    {
+      if (packet[5] == 0x02)
+      {
+        switch (packet[6])
+        {
+        case 0x00: 
+          //Serial.println("internal pump is off"); 
+          ProcessDataByte(0, pump, SENSOR_PUMP, "P");
+          break;
+        case 0x64:
+          //Serial.println("internal pump is operating in the service water circuit"); 
+          ProcessDataByte(1, pump, SENSOR_PUMP, "P");
+          break;
+        case 0xFE: 
+          //Serial.println("internal pump is operating in the heating circuit"); 
+          ProcessDataByte(2, pump, SENSOR_PUMP, "P");
+          break;
+        }
+      }
+    }
+  }
+  else if (packet[3] == 0x16)
+  {
+    if (packet[5] == 0x00)
+    {
+      Serial.print("Vaillant Broadcast Service - date / time "); 
+      Serial.print(packet[12], HEX);
+      Serial.print(":");
+      Serial.print(packet[10], HEX);
+      Serial.print(":");
+      Serial.print(packet[9], HEX);
+      Serial.print(" ");
+      Serial.print(packet[11], HEX);
+      Serial.print(" ");
+      Serial.print(packet[8], HEX);
+      Serial.print("-");
+      Serial.print(packet[7], HEX);
+      Serial.print("-");
+      Serial.print(packet[6], HEX);
+      Serial.println(); 
+    }
+    else if (packet[6] == 0x01)
+    {
+      Serial.println("Vaillant broadcast servce");
+    }
+  }
+  else
+  {
+    Serial.println("unhandled Vaillant telegram");
   }
 }
 
