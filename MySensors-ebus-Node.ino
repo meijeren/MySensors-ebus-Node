@@ -11,7 +11,7 @@
 
 #define NODE_ID       0xB5
 #define NODE_TEXT     "Vaillant ebus node"
-#define NODE_VERSION  "0.4"
+#define NODE_VERSION  "0.5"
 
 #define RECEIVE_PIN   A0
 #define TRANSMIT_PIN  11
@@ -343,8 +343,10 @@ void loop() // run over and over
           return;
         }
         ReconstructTelegram();
+        /*
         MyMessage msg(SENSOR_EBUS, V_VAR2);
-        gw.send(msg.set((void*)packet, packetBytes));
+        gw.send(msg.set((void*)packet, min(packetBytes, MAX_PAYLOAD)));
+        */
         if (packet[2] == 0xB5)
         {
           ParseVaillantTelegram();
@@ -353,13 +355,13 @@ void loop() // run over and over
         {
           if (packetBytes >= 20)
           {
-            Serial.print("Identification: ");
-            Serial.print(char(packet[9]));
-            Serial.print(char(packet[10]));
-            Serial.print(char(packet[11]));
-            Serial.print(char(packet[12]));
-            Serial.print(char(packet[13]));
-            Serial.print("\tSW-Version: ");
+            Serial.print(F("Identification: "));
+            char model[MAX_PAYLOAD];
+            strcpy(model, "Vaillant ");
+            strncat(model, (char*)&packet[9], 5);
+            strcat(model, " ");
+            MyMessage msg(SENSOR_MODEL, V_VAR2);
+            gw.send(msg.set((void*)model, min(strlen(model), MAX_PAYLOAD)));
             Serial.print(packet[14]);
             Serial.print(".");
             Serial.print(packet[15]);
@@ -372,7 +374,7 @@ void loop() // run over and over
         }
         else 
         {
-          Serial.println("Unhandled telegram");
+          Serial.println(F("Unhandled telegram"));
         }
         packetBytes = 0;
       }
@@ -388,7 +390,7 @@ void ParseVaillantTelegram()
     {
       if (packetBytes >= 11)
       {
-          Serial.print("Vaillant Get Operating Mode: TV"); 
+          Serial.print(F("Vaillant Get Operating Mode: TV")); 
           Serial.print(packet[9], HEX);
           Serial.print(" op.mode=");
           Serial.println(packet[10], HEX);
@@ -396,16 +398,16 @@ void ParseVaillantTelegram()
     }
     else if (packet[5] == 0x00)
     {
-      Serial.println("Vaillant Get Operational Data - data/time");
+      Serial.println(F("Vaillant Get Operational Data - DCF date/time"));
     }
     else
     {
-      Serial.println("Vaillant Get Operational Data - unhandled block");
+      Serial.println(F("Vaillant Get Operational Data - unhandled block"));
     }
   }
   else if (packet[3] == 0x10)
   {
-    Serial.println("Vaillant Room Controller: "); 
+    Serial.println(F("Vaillant Room Controller: ")); 
     if (packetBytes >= 16)
     {
       ProcessData1c(7, vtt);
@@ -416,7 +418,7 @@ void ParseVaillantTelegram()
   {
     if (packet[5] == 0x01)
     {
-      Serial.println("Vaillant Burner Control Unit - block 1"); 
+      Serial.println(F("Vaillant Burner Control Unit - block 1")); 
       ProcessData1c(9, vt);
       ProcessData1c(10, nt);
       ProcessData2b(11, ta);
@@ -425,19 +427,19 @@ void ParseVaillantTelegram()
       ProcessDataBit(packet[15], 0, heating, SENSOR_HEATING, "H");
       ProcessDataBit(packet[15], 1, water, SENSOR_HOT_WATER, "W");
     }
-    if (packet[5] == 0x02)
+    else if (packet[5] == 0x02)
     {
-      Serial.println("Vaillant Burner Control Unit - block 2"); 
+      Serial.println(F("Vaillant Burner Control Unit - block 2")); 
       ProcessData1c(13, wtt);
     }
     else
     {
-      Serial.println("Vaillant Burner Control Unit - unhandled block");
+      Serial.println(F("Vaillant Burner Control Unit - unhandled block"));
     }
   }
   else if (packet[3] == 0x12)
   {
-    Serial.println("Vaillant pump");
+    Serial.println(F("Vaillant pump"));
     if ((packet[0] == 0x10) && (packet[1] == 0x08))
     {
       // Heater controller
@@ -483,9 +485,9 @@ void ParseVaillantTelegram()
   {
     if (packet[5] == 0x00)
     {
-      Serial.print("Vaillant Broadcast Service - date / time ");
-      char buffer[50]; 
-      sprintf(buffer, "%x:%x:%x %x:%x:%x", packet[12], packet[10], packet[9], packet[11], packet[8], packet[7]);
+      Serial.print(F("Vaillant Broadcast Service - date / time "));
+      char buffer[50] = {0}; 
+      snprintf(buffer, sizeof(buffer), "20%02x-%02x-%02x %02x:%02x:%02x", packet[12], packet[10], packet[9], packet[8], packet[11], packet[7]);
       Serial.println(buffer); 
       MyMessage msg(SENSOR_DT, V_VAR2);
       gw.send(msg.set((void*)buffer, strlen(buffer)));
@@ -496,12 +498,12 @@ void ParseVaillantTelegram()
     }
     else if (packet[5] == 0x01)
     {
-      Serial.println("Vaillant broadcast servce");
+      Serial.println(F("Vaillant broadcast service"));
     }
   }
   else
   {
-    Serial.println("unhandled Vaillant telegram");
+    Serial.println(F("unhandled Vaillant telegram"));
   }
 }
 
