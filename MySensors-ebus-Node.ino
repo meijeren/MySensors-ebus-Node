@@ -23,11 +23,13 @@
 #define SENSOR_VT 3
 #define SENSOR_NT 4
 #define SENSOR_WTT 5
+// WT = Brauchwasser Auslauftemperatur (Water Temperature)
 #define SENSOR_WT 6
 #define SENSOR_STT 7
+// ST = Brauchwasser Speichertemperatur (Boiler Temperature)
 #define SENSOR_ST 8
 #define SENSOR_HEATING 9
-#define SENSOR_WATER 10
+#define SENSOR_HOT_WATER 10
 #define SENSOR_MODEL 11
 #define SENSOR_HOT_WATER_PUMP 12
 #define SENSOR_PUMP 13
@@ -35,6 +37,7 @@
 #define SENSOR_STATE 15
 // TA = Outside temperature
 #define SENSOR_TA 16 
+#define SENSOR_DT 17
 
 class CSensor
 {
@@ -107,10 +110,11 @@ void setup()
   gw.present(SENSOR_STT, S_TEMP, "STT");
   gw.present(SENSOR_ST, S_TEMP, "ST");
   gw.present(SENSOR_HEATING, S_BINARY);
-  gw.present(SENSOR_WATER, S_BINARY);
+  gw.present(SENSOR_HOT_WATER, S_BINARY);
   gw.present(SENSOR_MODEL, S_CUSTOM);
   gw.present(SENSOR_EBUS, S_CUSTOM);
   gw.present(SENSOR_STATE, S_CUSTOM);
+  gw.present(SENSOR_DT, S_CUSTOM);
 }
 
 float ProcessData2b(const byte a_Offset, CFloatSensor & a_Sensor)
@@ -295,6 +299,10 @@ byte CalculateCRC(byte* & data, int len )
 
 void ParseVaillantTelegram();
 void ReconstructTelegram();
+void ControllerTime(unsigned long a_SecondsSince1970)
+{
+
+}
 
 void loop() // run over and over
 {
@@ -397,12 +405,11 @@ void ParseVaillantTelegram()
   }
   else if (packet[3] == 0x10)
   {
+    Serial.println("Vaillant Room Controller: "); 
     if (packetBytes >= 16)
     {
-      Serial.print("Vaillant Room Controller: "); 
       ProcessData1c(7, vtt);
       ProcessData1c(8, stt);
-      Serial.println();
     }
   }
   else if (packet[3] == 0x11)
@@ -416,7 +423,7 @@ void ParseVaillantTelegram()
       ProcessData1c(13, wt);
       ProcessData1c(14, st);
       ProcessDataBit(packet[15], 0, heating, SENSOR_HEATING, "H");
-      ProcessDataBit(packet[15], 1, water, SENSOR_WATER, "W");
+      ProcessDataBit(packet[15], 1, water, SENSOR_HOT_WATER, "W");
     }
     if (packet[5] == 0x02)
     {
@@ -476,21 +483,16 @@ void ParseVaillantTelegram()
   {
     if (packet[5] == 0x00)
     {
-      Serial.print("Vaillant Broadcast Service - date / time "); 
-      Serial.print(packet[12], HEX);
-      Serial.print(":");
-      Serial.print(packet[10], HEX);
-      Serial.print(":");
-      Serial.print(packet[9], HEX);
-      Serial.print(" ");
-      Serial.print(packet[11], HEX);
-      Serial.print(" ");
-      Serial.print(packet[8], HEX);
-      Serial.print("-");
-      Serial.print(packet[7], HEX);
-      Serial.print("-");
-      Serial.print(packet[6], HEX);
-      Serial.println(); 
+      Serial.print("Vaillant Broadcast Service - date / time ");
+      char buffer[50]; 
+      sprintf(buffer, "%x:%x:%x %x:%x:%x", packet[12], packet[10], packet[9], packet[11], packet[8], packet[7]);
+      Serial.println(buffer); 
+      MyMessage msg(SENSOR_DT, V_VAR2);
+      gw.send(msg.set((void*)buffer, strlen(buffer)));
+      if (packet[2] == 0xB5)
+      {
+        ParseVaillantTelegram();
+      }
     }
     else if (packet[5] == 0x01)
     {
@@ -593,3 +595,56 @@ float CFloatSensor::Value()
 {
   return m_Value; 
 }
+
+/*
+Weergave  Betekenis
+CV-bedrijf
+S.00  CV geen warmtevraag
+S.01  CV-functie ventilator start
+S.02  CV-functie pomp voorloop
+S.03  CV-bedrijf ontsteking
+S.04  CV-functie brander aan
+S.05  CV-functie pomp-/ventilator naloop
+S.06  CV-functie ventilator naloop
+S.07  CV-functie pomp naloop
+S.08  CV-functie branderwachttijd
+Warmwaterfunctie
+S.10  Warmwateraanvraag door stromingssensor
+S.11  Warmwaterfunctie ventilatorstart
+S.13  Warmwaterfunctie ontsteking
+S.14  Warmwaterfunctie brander aan
+S.15  Warmwaterfunctie pomp-/ventilator naloop
+S.16  Warmwaterfunctie ventilatornaloop
+S.17  Warmwaterfunctie pomp naloop
+Comfortmodus warme start of warmwatermodus met actoSTOR
+S.20  Warmwatervraag
+S.21  Warmwaterfunctie ventilatorstart
+S.22  Warmwaterfunctie pomp voorloop
+S.23  Warmwaterfunctie ontsteking
+S.24  Warmwaterfunctie brander aan
+S.25  Warmwaterfunctie pomp-/ventilator naloop
+S.26  Warmwaterfunctie ventilatornaloop
+S.27  Warmwaterfunctie pomp naloop
+S.28  Warm water branderwachttijd
+Speciale gevallen
+S.30  Kamerthermostaat (RT) blokkeert CV vraag
+S.31  Zomermodus actief of geen warmtevraag door eBusthermostaat
+S.32  Wachttijd wegens afwijking ventilatortoerental
+S.34  Vorstbeveiligingsfunctie actief
+S.39  "Brander uit contact" is geactiveerd (bijv. aanlegthermostaat of condensaatpomp)
+S.40  Comfortbeveiligingsmodus is actief: CV-ketel loopt met beperkt verwarmingscomfort (¬ hfdst. 13.2.3)
+S.41  Waterdruk > 2,8 bar
+S.42  Bevestigingssignaal rookgaskleppen blokkeert branderfunctie (alleen in combinatie met toebehoren VR40) of condensaatpomp defect, warmtevraag wordt geblokkeerd
+S.46  Comfortbeveiligingsmodus vlamverlies minimumlast
+S.53  CV-ketel bevindt zich in de wachttijd van de modulatieblokkering/blokkeringsfunctie op grond van watergebrek (spreiding aanvoer-retour te groot).
+S.54  CV-ketel bevindt zich in de wachttijd van de blokkeringsfunctie op grond van watergebrek (temperatuurgradiënt)
+S.57  Wachttijd comfortbeveiligingsmodus
+S.58  Modulatiebegrenzing wegens geluidsvorming/wind
+S.61  Gasfamiliecontrole niet succesvol: codeerweerstand op de printplaat past niet bij de ingevoerde gasgroep (zie ook F.92).
+S.62  Gasfamiliecontrole niet succesvol: CO/CO2-waarden bij grenswaarden. Verbranding controleren.
+S.63  Gasfamiliecontrole niet succesvol: verbrandingskwaliteit buiten het toegestane bereik (zie ook F.93).
+S.76  Installatiedruk te gering; water bijvullen
+S.96  Test NTC-voeler retour loopt, warmtebragen zijn geblokkeerd
+S.97  Waterdruksensortest loopt, warmtevragen zijn geblokkeerd
+S.98  Test NTC-voeler aanvoer/retour loopt, warmtevragen zijn geblokkeerd
+*/
