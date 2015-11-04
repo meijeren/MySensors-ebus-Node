@@ -1,3 +1,3 @@
 # MySensors-ebus-Node
 
-MySensors node connected to the ebus of a Vaillant CV node.
+MySensors node connected to the energybus (ebus) of a Vaillant combination boiler.
