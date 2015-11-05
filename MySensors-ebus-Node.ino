@@ -11,11 +11,11 @@
 
 #define NODE_ID       0xB5
 #define NODE_TEXT     "Vaillant ebus node"
-#define NODE_VERSION  "0.5"
+#define NODE_VERSION  "0.6"
 
 #define RECEIVE_PIN   A0
 #define TRANSMIT_PIN  11
-#define REFRESH_INTERVAL 3600000  // Every hour
+#define REFRESH_INTERVAL 60000 //3600000  // Every hour
 
 // VTT wordt 90 als de ketel aanslaat.
 // VT en NT gaan dan oplopen
@@ -99,7 +99,7 @@ void setup()
 
   // Initialize library and add callback for incoming messages
   gw.begin(NULL, NODE_ID, false);
-  Serial.println(NODE_TEXT  " "  NODE_VERSION);
+  Serial.println(F(NODE_TEXT  " "  NODE_VERSION));
   // Send the sketch version information to the gateway and Controller
   gw.sendSketchInfo(NODE_TEXT, NODE_VERSION);
   gw.present(SENSOR_VT, S_TEMP, "VT");
@@ -330,7 +330,7 @@ void loop() // run over and over
         byte length = packet[4];
         if (packetBytes < 6 + length)
         {
-          Serial.println("Not enough bytes!");
+          Serial.println(F("Not enough bytes!"));
           packetBytes = 0;
           return;
         }
@@ -338,7 +338,7 @@ void loop() // run over and over
         byte * data = &packet[0];
         if (CalculateCRC(data, 5 + length) != crc)
         {
-          Serial.println("CRC error");
+          Serial.println(F("CRC error"));
           packetBytes = 0;
           return;
         }
@@ -360,14 +360,17 @@ void loop() // run over and over
             strcpy(model, "Vaillant ");
             strncat(model, (char*)&packet[9], 5);
             strcat(model, " ");
+            Serial.print(model);
+            /*
             MyMessage msg(SENSOR_MODEL, V_VAR2);
             gw.send(msg.set((void*)model, min(strlen(model), MAX_PAYLOAD)));
+            */
             Serial.print(packet[14]);
-            Serial.print(".");
+            Serial.print(F("."));
             Serial.print(packet[15]);
-            Serial.print(" HW-Version: ");
+            Serial.print(F(" HW-Version: "));
             Serial.print(packet[16]);
-            Serial.print(".");
+            Serial.print(F("."));
             Serial.print(packet[17]);
             Serial.println();
           }
@@ -392,7 +395,7 @@ void ParseVaillantTelegram()
       {
           Serial.print(F("Vaillant Get Operating Mode: TV")); 
           Serial.print(packet[9], HEX);
-          Serial.print(" op.mode=");
+          Serial.print(F(" op.mode="));
           Serial.println(packet[10], HEX);
       }
     }
@@ -486,15 +489,13 @@ void ParseVaillantTelegram()
     if (packet[5] == 0x00)
     {
       Serial.print(F("Vaillant Broadcast Service - date / time "));
-      char buffer[50] = {0}; 
+      char buffer[20] = {0}; 
       snprintf(buffer, sizeof(buffer), "20%02x-%02x-%02x %02x:%02x:%02x", packet[12], packet[10], packet[9], packet[8], packet[11], packet[7]);
       Serial.println(buffer); 
+      
       MyMessage msg(SENSOR_DT, V_VAR2);
-      gw.send(msg.set((void*)buffer, strlen(buffer)));
-      if (packet[2] == 0xB5)
-      {
-        ParseVaillantTelegram();
-      }
+      gw.send(msg.set((void*)buffer, min(strlen(buffer)+1, MAX_PAYLOAD)));
+      
     }
     else if (packet[5] == 0x01)
     {
