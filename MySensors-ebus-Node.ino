@@ -1,13 +1,13 @@
 #include <MyHwATMega328.h>
 #include <MySensor.h>
 #include <SPI.h>
+#include <SoftwareSerial.h>
 
 /*
   Vaillant ebus sensor node
 
 
  */
-#include <SoftwareSerial.h>
 
 #define NODE_ID       0xB5
 #define NODE_TEXT     "Vaillant ebus node"
