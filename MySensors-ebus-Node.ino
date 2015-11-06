@@ -3,6 +3,7 @@
 #include <SPI.h>
 #include <SoftwareSerial.h>
 #include "crc8.h"
+#include <Time.h>
 
 /*
   Vaillant energy bus sensor node
@@ -11,8 +12,8 @@
  */
 
 #define NODE_ID       0xB5
-#define NODE_TEXT     "Vaillant ebus node"
-#define NODE_VERSION  "0.7"
+#define NODE_TEXT     "VaillantEnergyBus"
+#define NODE_VERSION  "0.8"
 
 #define RECEIVE_PIN   A0
 #define TRANSMIT_PIN  11
@@ -83,6 +84,8 @@ bool heating = false;
 bool water = false;
 byte pump = 0;
 byte hotWaterPump = false;
+time_t ebusTime = 0;
+time_t controllerTime = 0;
 
 CFloatSensor vtt(SENSOR_VTT, "VTT");
 CFloatSensor vt(SENSOR_VT, "VT");
@@ -95,6 +98,8 @@ CFloatSensor ta(SENSOR_TA, "TA");
 
 void setup()
 {
+  setSyncProvider( RequestSync);  //set function to call when sync required
+  
   // set the data rate for the SoftwareSerial port
   mySerial.begin(2400);
 
@@ -199,9 +204,17 @@ byte ProcessDataByte(byte value, byte & current, int sensor, char * name)
 
 void ParseVaillantTelegram();
 void ReconstructTelegram();
+
+time_t RequestSync()
+{
+  // Request the time from the controller
+  gw.requestTime(ControllerTime);
+  return 0; // the time will be sent later in response to serial mesg
+}
+
 void ControllerTime(unsigned long a_SecondsSince1970)
 {
-
+  controllerTime = a_SecondsSince1970;
 }
 
 void loop() // run over and over
@@ -259,20 +272,12 @@ void loop() // run over and over
             char model[MAX_PAYLOAD];
             strcpy(model, "Vaillant ");
             strncat(model, (char*)&packet[9], 5);
-            strcat(model, " ");
-            Serial.print(model);
+            sprintf(&model[strlen(model)], " HW-%x.%x SW-%x.%x", packet[16], packet[17], packet[14], packet[15]);
+            Serial.println(model);
             /*
             MyMessage msg(SENSOR_MODEL, V_VAR2);
-            gw.send(msg.set((void*)model, min(strlen(model), MAX_PAYLOAD)));
+            gw.send(msg.set(model));
             */
-            Serial.print(packet[14]);
-            Serial.print(F("."));
-            Serial.print(packet[15]);
-            Serial.print(F(" HW-Version: "));
-            Serial.print(packet[16]);
-            Serial.print(F("."));
-            Serial.print(packet[17]);
-            Serial.println();
           }
         }
         else 
@@ -283,6 +288,11 @@ void loop() // run over and over
       }
     }
   }
+}
+
+static inline byte Bcd2Dec(byte hex)
+{
+  return ((hex & 0xF0) >> 4) * 10 + (hex & 0x0F);
 }
 
 void ParseVaillantTelegram()
@@ -392,6 +402,17 @@ void ParseVaillantTelegram()
       char buffer[20] = {0}; 
       snprintf(buffer, sizeof(buffer), "20%02x-%02x-%02x %02x:%02x:%02x", packet[12], packet[10], packet[9], packet[8], packet[11], packet[7]);
       Serial.println(buffer); 
+      tmElements_t t;
+      t.Year = 2000 + Bcd2Dec(packet[12]);
+      t.Month = Bcd2Dec(packet[10]);
+      t.Day = Bcd2Dec(packet[9]);
+      t.Hour = Bcd2Dec(packet[8]);
+      t.Minute = Bcd2Dec(packet[11]);
+      t.Second = Bcd2Dec(packet[7]);
+      time_t unix = makeTime(t);
+      /* low level functions to convert to and from system time                     */
+/*void breakTime(time_t time, tmElements_t &tm);  // break time_t into elements
+time_t makeTime(tmElements_t &tm);  // convert time elements into time_t*/
       
       MyMessage msg(SENSOR_DT, V_VAR2);
       gw.send(msg.set(buffer));
@@ -452,6 +473,7 @@ void ShowValues()
   Serial.print(hotWaterPump);
   Serial.println("");
 }
+
 
 CSensor::CSensor(byte a_ID, const char * a_Name) :
   m_ID(a_ID),
