@@ -98,7 +98,7 @@ CFloatSensor ta(SENSOR_TA, "TA");
 
 void setup()
 {
-  setSyncProvider( RequestSync);  //set function to call when sync required
+//  setSyncProvider( RequestSync);  //set function to call when sync required
   
   // set the data rate for the SoftwareSerial port
   mySerial.begin(2400);
@@ -228,6 +228,7 @@ void loop() // run over and over
     {
       packet[packetBytes] = data;
       packetBytes++;
+      if (data <= 0xF) Serial.print(" ");
       Serial.print(data, HEX);
       Serial.print(" ");
     }
@@ -274,10 +275,10 @@ void loop() // run over and over
             strncat(model, (char*)&packet[9], 5);
             sprintf(&model[strlen(model)], " HW-%x.%x SW-%x.%x", packet[16], packet[17], packet[14], packet[15]);
             Serial.println(model);
-            /*
+            
             MyMessage msg(SENSOR_MODEL, V_VAR2);
             gw.send(msg.set(model));
-            */
+            
           }
         }
         else 
@@ -400,15 +401,15 @@ void ParseVaillantTelegram()
     {
       Serial.print(F("Vaillant Broadcast Service - date / time "));
       char buffer[20] = {0}; 
-      snprintf(buffer, sizeof(buffer), "20%02x-%02x-%02x %02x:%02x:%02x", packet[12], packet[10], packet[9], packet[8], packet[11], packet[7]);
+      snprintf(buffer, sizeof(buffer), "20%02x-%02x-%02x %02x:%02x:%02x", packet[12], packet[10], packet[9], packet[8], packet[7], packet[6]);
       Serial.println(buffer); 
       tmElements_t t;
       t.Year = 2000 + Bcd2Dec(packet[12]);
       t.Month = Bcd2Dec(packet[10]);
       t.Day = Bcd2Dec(packet[9]);
       t.Hour = Bcd2Dec(packet[8]);
-      t.Minute = Bcd2Dec(packet[11]);
-      t.Second = Bcd2Dec(packet[7]);
+      t.Minute = Bcd2Dec(packet[7]);
+      t.Second = Bcd2Dec(packet[6]);
       time_t unix = makeTime(t);
       /* low level functions to convert to and from system time                     */
 /*void breakTime(time_t time, tmElements_t &tm);  // break time_t into elements
