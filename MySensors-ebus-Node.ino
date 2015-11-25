@@ -1,4 +1,5 @@
-#include <MyHwATMega328.h>
+#define MY_NODE_ID       0xB5
+#define MY_RADIO_NRF24
 #include <MySensor.h>
 #include <SPI.h>
 #include <SoftwareSerial.h>
@@ -11,7 +12,6 @@
 
  */
 
-#define NODE_ID       0xB5
 #define NODE_TEXT     "VaillantEnergyBus"
 #define NODE_VERSION  "0.8"
 
@@ -19,15 +19,15 @@
 #define TRANSMIT_PIN  11
 #define REFRESH_INTERVAL 60000 //3600000  // Every hour
 
+// todo: omschrijven naar HVAC:
+// S_HVAC, // Thermostat/HVAC device. V_HVAC_SETPOINT_HEAT, V_HVAC_SETPOINT_COLD, V_HVAC_FLOW_STATE, V_HVAC_FLOW_MODE, V_TEMP
+
 // VTT wordt 90 als de ketel aanslaat.
 // VT en NT gaan dan oplopen
-#define SENSOR_VTT 1
 #define SENSOR_VT 3
 #define SENSOR_NT 4
-#define SENSOR_WTT 5
 // WT = Brauchwasser Auslauftemperatur (Water Temperature)
 #define SENSOR_WT 6
-#define SENSOR_STT 7
 // ST = Brauchwasser Speichertemperatur (Boiler Temperature)
 #define SENSOR_ST 8
 #define SENSOR_HEATING 9
@@ -58,8 +58,9 @@ class CFloatSensor: public CSensor
 {
 private:
   float m_Value;
+  byte m_Type;
 public:
-  CFloatSensor(byte a_ID, const char * a_Name);
+  CFloatSensor(byte a_ID, byte a_Type, const char * a_Name);
   bool SetValue(float a_Value);
   float Value();
 };
@@ -69,13 +70,6 @@ float ProcessData2b(const byte a_Offset, CFloatSensor & a_Sensor);
 float ProcessData2c(const byte a_Offset, CFloatSensor & a_Sensor);
 
 SoftwareSerial mySerial(RECEIVE_PIN, TRANSMIT_PIN); // RX, TX
-// NRFRF24L01 radio driver (set low transmit power by default)
-MyTransportNRF24 radio(RF24_CE_PIN, RF24_CS_PIN, RF24_PA_LEVEL_GW);
-// Select AtMega328 hardware profile
-MyHwATMega328 hw;
-// Construct MySensors library
-MySensor gw(radio, hw);
-// Initialize temperature message
 
 int packetBytes = 0;
 byte packet[128];
@@ -87,14 +81,14 @@ byte hotWaterPump = false;
 time_t ebusTime = 0;
 time_t controllerTime = 0;
 
-CFloatSensor vtt(SENSOR_VTT, "VTT");
-CFloatSensor vt(SENSOR_VT, "VT");
-CFloatSensor nt(SENSOR_NT, "NT");
-CFloatSensor stt(SENSOR_STT, "STT");
-CFloatSensor st(SENSOR_ST, "ST");
-CFloatSensor wtt(SENSOR_WTT, "WTT");
-CFloatSensor wt(SENSOR_WT, "WTT");
-CFloatSensor ta(SENSOR_TA, "TA");
+CFloatSensor vtt(SENSOR_VT, V_HVAC_SETPOINT_HEAT, "VTT");
+CFloatSensor vt(SENSOR_VT, V_TEMP, "VT");
+CFloatSensor nt(SENSOR_NT, V_TEMP, "NT");
+CFloatSensor stt(SENSOR_ST, V_HVAC_SETPOINT_HEAT, "STT");
+CFloatSensor st(SENSOR_ST, V_TEMP, "ST");
+CFloatSensor wtt(SENSOR_WT, V_HVAC_SETPOINT_HEAT, "WTT");
+CFloatSensor wt(SENSOR_WT, V_TEMP, "WTT");
+CFloatSensor ta(SENSOR_TA, V_TEMP, "TA");
 
 void setup()
 {
@@ -102,25 +96,23 @@ void setup()
   
   // set the data rate for the SoftwareSerial port
   mySerial.begin(2400);
+}
 
-  // Initialize library and add callback for incoming messages
-  gw.begin(NULL, NODE_ID, false);
+void presentation()
+{
   Serial.println(F(NODE_TEXT  " "  NODE_VERSION));
   // Send the sketch version information to the gateway and Controller
-  gw.sendSketchInfo(NODE_TEXT, NODE_VERSION);
-  gw.present(SENSOR_VT, S_TEMP, "VT");
-  gw.present(SENSOR_VTT, S_TEMP, "VTT");
-  gw.present(SENSOR_NT, S_TEMP, "NT");
-  gw.present(SENSOR_WTT, S_TEMP, "WTT");
-  gw.present(SENSOR_WT, S_TEMP, "WT");
-  gw.present(SENSOR_STT, S_TEMP, "STT");
-  gw.present(SENSOR_ST, S_TEMP, "ST");
-  gw.present(SENSOR_HEATING, S_BINARY);
-  gw.present(SENSOR_HOT_WATER, S_BINARY);
-  gw.present(SENSOR_MODEL, S_CUSTOM);
-  gw.present(SENSOR_EBUS, S_CUSTOM);
-  gw.present(SENSOR_STATE, S_CUSTOM);
-  gw.present(SENSOR_DT, S_CUSTOM);
+  sendSketchInfo(NODE_TEXT, NODE_VERSION);
+  present(SENSOR_VT, S_HEATER, "VT");
+  present(SENSOR_NT, S_TEMP, "NT");
+  present(SENSOR_WT, S_HEATER, "WT");
+  present(SENSOR_ST, S_HEATER, "ST");
+  present(SENSOR_HEATING, S_BINARY);
+  present(SENSOR_HOT_WATER, S_BINARY);
+  present(SENSOR_MODEL, S_CUSTOM);
+  present(SENSOR_EBUS, S_CUSTOM);
+  present(SENSOR_STATE, S_CUSTOM);
+  present(SENSOR_DT, S_CUSTOM);
 }
 
 float ProcessData2b(const byte a_Offset, CFloatSensor & a_Sensor)
@@ -182,7 +174,7 @@ bool ProcessDataBit(byte value, byte bit, bool & current, int sensor, char * nam
     ShowValues();
     // Send in the new binary
     MyMessage msg(sensor, V_STATUS);
-    gw.send(msg.set(current));
+    send(msg.set(current));
   }
 }
 
@@ -198,19 +190,12 @@ byte ProcessDataByte(byte value, byte & current, int sensor, char * name)
     ShowValues();
     // Send in the new binary
     MyMessage msg(sensor, V_STATUS);
-    gw.send(msg.set(current));
+    send(msg.set(current));
   }
 }
 
 void ParseVaillantTelegram();
 void ReconstructTelegram();
-
-time_t RequestSync()
-{
-  // Request the time from the controller
-  gw.requestTime(ControllerTime);
-  return 0; // the time will be sent later in response to serial mesg
-}
 
 void ControllerTime(unsigned long a_SecondsSince1970)
 {
@@ -219,8 +204,6 @@ void ControllerTime(unsigned long a_SecondsSince1970)
 
 void loop() // run over and over
 {
-  // Alway process incoming messages whenever possible
-  gw.process();
   if (mySerial.available())
   {
     int data = mySerial.read();
@@ -273,11 +256,11 @@ void loop() // run over and over
             char model[MAX_PAYLOAD];
             strcpy(model, "Vaillant ");
             strncat(model, (char*)&packet[9], 5);
-            sprintf(&model[strlen(model)], " HW-%x.%x SW-%x.%x", packet[16], packet[17], packet[14], packet[15]);
+            sprintf(&model[strlen(model)], " %x.%x/%x.%x", packet[16], packet[17], packet[14], packet[15]);
             Serial.println(model);
             
             MyMessage msg(SENSOR_MODEL, V_VAR2);
-            gw.send(msg.set(model));
+            send(msg.set(model));
             
           }
         }
@@ -416,7 +399,7 @@ void ParseVaillantTelegram()
 time_t makeTime(tmElements_t &tm);  // convert time elements into time_t*/
       
       MyMessage msg(SENSOR_DT, V_VAR2);
-      gw.send(msg.set(buffer));
+      send(msg.set(buffer));
       
     }
     else if (packet[5] == 0x01)
@@ -497,8 +480,9 @@ void CSensor::Touch()
   m_Millis = millis();
 }
 
-CFloatSensor::CFloatSensor(byte a_ID, const char * a_Name) :
-  CSensor(a_ID, a_Name)
+CFloatSensor::CFloatSensor(byte a_ID, byte a_Type, const char * a_Name) :
+  CSensor(a_ID, a_Name),
+  m_Type(a_Type)
 {
   m_Value = 0;
 }
@@ -509,8 +493,8 @@ bool CFloatSensor::SetValue(float a_Value)
   {
     m_Value = a_Value;
     // Send in the new temperature
-    MyMessage msg(m_ID, V_TEMP);
-    gw.send(msg.set(m_Value, 1));
+    MyMessage msg(m_ID, m_Type);
+    send(msg.set(m_Value, 1));
     Touch();
     return true;
   }
