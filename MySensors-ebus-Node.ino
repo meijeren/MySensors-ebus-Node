@@ -1,5 +1,6 @@
 #define MY_NODE_ID       0xB5
 #define MY_RADIO_NRF24
+#define MY_DEBUG
 #include <MySensor.h>
 #include <SPI.h>
 #include <SoftwareSerial.h>
@@ -13,7 +14,7 @@
  */
 
 #define NODE_TEXT     "VaillantEnergyBus"
-#define NODE_VERSION  "0.8"
+#define NODE_VERSION  "1.0"
 
 #define RECEIVE_PIN   A0
 #define TRANSMIT_PIN  11
@@ -259,7 +260,7 @@ void loop() // run over and over
             sprintf(&model[strlen(model)], " %x.%x/%x.%x", packet[16], packet[17], packet[14], packet[15]);
             Serial.println(model);
             
-            MyMessage msg(SENSOR_MODEL, V_VAR2);
+            MyMessage msg(SENSOR_MODEL, V_TEXT);
             send(msg.set(model));
             
           }
@@ -398,7 +399,7 @@ void ParseVaillantTelegram()
 /*void breakTime(time_t time, tmElements_t &tm);  // break time_t into elements
 time_t makeTime(tmElements_t &tm);  // convert time elements into time_t*/
       
-      MyMessage msg(SENSOR_DT, V_VAR2);
+      MyMessage msg(SENSOR_DT, V_TEXT);
       send(msg.set(buffer));
       
     }
