@@ -1,6 +1,10 @@
 #define MY_NODE_ID       0xB5
 #define MY_RADIO_NRF24
+<<<<<<< HEAD
 #define MY_DEBUG
+=======
+
+>>>>>>> origin/master
 #include <MySensor.h>
 #include <SPI.h>
 #include <SoftwareSerial.h>
@@ -198,7 +202,7 @@ byte ProcessDataByte(byte value, byte & current, int sensor, char * name)
 void ParseVaillantTelegram();
 void ReconstructTelegram();
 
-void ControllerTime(unsigned long a_SecondsSince1970)
+void receiveTime(unsigned long a_SecondsSince1970)
 {
   controllerTime = a_SecondsSince1970;
 }
