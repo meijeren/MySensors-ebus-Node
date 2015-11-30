@@ -67,6 +67,17 @@ public:
   float Value();
 };
 
+class CBitSensor: public CSensor
+{
+private:
+  bool m_Value;
+  byte m_Type;
+public:
+  CBitSensor(byte a_ID, byte a_Type, const char * a_Name);
+  bool SetValue(bool a_Value);
+  bool Value();
+};
+
 float ProcessData1c(const byte a_Offset, CFloatSensor & a_Sensor);
 float ProcessData2b(const byte a_Offset, CFloatSensor & a_Sensor);
 float ProcessData2c(const byte a_Offset, CFloatSensor & a_Sensor);
@@ -506,6 +517,32 @@ bool CFloatSensor::SetValue(float a_Value)
 float CFloatSensor::Value()
 {
   return m_Value; 
+}
+
+CBitSensor::CBitSensor(byte a_ID, byte a_Type, const char * a_Name)
+  CSensor(a_ID, a_Name),
+  m_Type(a_Type)
+{
+  m_Value = false;
+}
+
+bool CBitSensor::SetValue(bool a_Value)
+{
+  if ((a_Value != m_Value) || NeedsRefresh())
+  {
+    m_Value = a_Value;
+    // Send in the new temperature
+    MyMessage msg(m_ID, m_Type);
+    send(msg.set(m_Value, 1));
+    Touch();
+    return true;
+  }
+  return false;
+}
+
+boolCBitSensor:: Value()
+{
+  return m_Value;
 }
 
 /*
