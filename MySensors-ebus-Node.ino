@@ -100,7 +100,7 @@ CFloatSensor nt(SENSOR_NT, V_TEMP, "NT");
 CFloatSensor stt(SENSOR_ST, V_HVAC_SETPOINT_HEAT, "STT");
 CFloatSensor st(SENSOR_ST, V_TEMP, "ST");
 CFloatSensor wtt(SENSOR_WT, V_HVAC_SETPOINT_HEAT, "WTT");
-CFloatSensor wt(SENSOR_WT, V_TEMP, "WTT");
+CFloatSensor wt(SENSOR_WT, V_TEMP, "WT");
 CFloatSensor ta(SENSOR_TA, V_TEMP, "TA");
 
 void setup()
