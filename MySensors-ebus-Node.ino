@@ -1,10 +1,7 @@
 #define MY_NODE_ID       0xB5
 #define MY_RADIO_NRF24
-<<<<<<< HEAD
 #define MY_DEBUG
-=======
 
->>>>>>> origin/master
 #include <MySensor.h>
 #include <SPI.h>
 #include <SoftwareSerial.h>
