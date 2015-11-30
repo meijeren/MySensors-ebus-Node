@@ -15,11 +15,11 @@
  */
 
 #define NODE_TEXT     "VaillantEnergyBus"
-#define NODE_VERSION  "1.0"
+#define NODE_VERSION  "1.1"
 
 #define RECEIVE_PIN   A0
 #define TRANSMIT_PIN  11
-#define REFRESH_INTERVAL 60000 //3600000  // Every hour
+#define REFRESH_INTERVAL 300000 // Every five minutes
 
 // todo: omschrijven naar HVAC:
 // S_HVAC, // Thermostat/HVAC device. V_HVAC_SETPOINT_HEAT, V_HVAC_SETPOINT_COLD, V_HVAC_FLOW_STATE, V_HVAC_FLOW_MODE, V_TEMP
@@ -60,7 +60,7 @@ class CFloatSensor: public CSensor
 {
 private:
   float m_Value;
-  byte m_Type;
+  byte  m_Type;
 public:
   CFloatSensor(byte a_ID, byte a_Type, const char * a_Name);
   bool SetValue(float a_Value);
@@ -78,34 +78,46 @@ public:
   bool Value();
 };
 
-float ProcessData1c(const byte a_Offset, CFloatSensor & a_Sensor);
-float ProcessData2b(const byte a_Offset, CFloatSensor & a_Sensor);
-float ProcessData2c(const byte a_Offset, CFloatSensor & a_Sensor);
+class CByteSensor: public CSensor
+{
+private:
+  bool m_Value;
+  byte m_Type;
+public:
+  CByteSensor(byte a_ID, byte a_Type, const char * a_Name);
+  bool SetValue(const byte a_Value);
+  byte Value() const;
+};
+
+void ProcessData1c(const byte a_Offset, CFloatSensor & a_Sensor);
+void ProcessData2b(const byte a_Offset, CFloatSensor & a_Sensor);
+void ProcessData2c(const byte a_Offset, CFloatSensor & a_Sensor);
+void ProcessDataBit(const byte a_Offset, const byte a_Bit, CBitSensor & a_Sensor);
 
 SoftwareSerial mySerial(RECEIVE_PIN, TRANSMIT_PIN); // RX, TX
 
 int packetBytes = 0;
 byte packet[128];
 
-bool heating = false;
-bool water = false;
-byte pump = 0;
-byte hotWaterPump = false;
 time_t ebusTime = 0;
 time_t controllerTime = 0;
 
+CFloatSensor vt (SENSOR_VT, V_TEMP, "VT");
 CFloatSensor vtt(SENSOR_VT, V_HVAC_SETPOINT_HEAT, "VTT");
-CFloatSensor vt(SENSOR_VT, V_TEMP, "VT");
-CFloatSensor nt(SENSOR_NT, V_TEMP, "NT");
+CFloatSensor nt (SENSOR_NT, V_TEMP, "NT");
+CFloatSensor st (SENSOR_ST, V_TEMP, "ST");
 CFloatSensor stt(SENSOR_ST, V_HVAC_SETPOINT_HEAT, "STT");
-CFloatSensor st(SENSOR_ST, V_TEMP, "ST");
+CFloatSensor wt (SENSOR_WT, V_TEMP, "WT");
 CFloatSensor wtt(SENSOR_WT, V_HVAC_SETPOINT_HEAT, "WTT");
-CFloatSensor wt(SENSOR_WT, V_TEMP, "WT");
-CFloatSensor ta(SENSOR_TA, V_TEMP, "TA");
+CFloatSensor ta (SENSOR_TA, V_TEMP, "TA");
+CBitSensor heating(SENSOR_HEATING,   V_STATUS, "H");
+CBitSensor water  (SENSOR_HOT_WATER, V_STATUS, "W");
+CByteSensor pump(SENSOR_PUMP, V_STATUS, "P");
+CByteSensor hotWaterPump(SENSOR_HOT_WATER_PUMP, V_STATUS, "HWP");
 
 void setup()
 {
-//  setSyncProvider( RequestSync);  //set function to call when sync required
+  // setSyncProvider( RequestSync);  //set function to call when sync required
   
   // set the data rate for the SoftwareSerial port
   mySerial.begin(2400);
@@ -128,7 +140,7 @@ void presentation()
   present(SENSOR_DT, S_CUSTOM);
 }
 
-float ProcessData2b(const byte a_Offset, CFloatSensor & a_Sensor)
+void ProcessData2b(const byte a_Offset, CFloatSensor & a_Sensor)
 {
   float value;
   if ((packet[a_Offset+1] & 0x80) == 0x80)
@@ -142,7 +154,7 @@ float ProcessData2b(const byte a_Offset, CFloatSensor & a_Sensor)
   a_Sensor.SetValue(value);
 }
 
-float ProcessData2c(const byte a_Offset, CFloatSensor & a_Sensor)
+void ProcessData2c(const byte a_Offset, CFloatSensor & a_Sensor)
 {
   float value;
   if ((packet[a_Offset+1] & 0x80) == 0x80)
@@ -156,54 +168,20 @@ float ProcessData2c(const byte a_Offset, CFloatSensor & a_Sensor)
   a_Sensor.SetValue(value);
 }
 
-float ProcessData1c(const byte a_Offset, CFloatSensor & a_Sensor)
+void ProcessData1c(const byte a_Offset, CFloatSensor & a_Sensor)
 {
   if (a_Sensor.SetValue(packet[a_Offset] / 2.0))
   {
-    /*
-    Serial.print(name);
-    Serial.print("=");
-    Serial.print(current);
-    Serial.print("->");
-    Serial.print(v);
-    Serial.print(" C");
-    Serial.println();
-    */
     ShowValues();
   }
 }
 
-bool ProcessDataBit(byte value, byte bit, bool & current, int sensor, char * name)
+void ProcessDataBit(const byte a_Offset, const byte a_Bit, CBitSensor & a_Sensor)
 {
-  bool v = ((1 << bit) & value) != 0;
-  //bool v = ((value >> bit) & 0x1) == 0x1;
-  if (v != current)
+  bool v = ((1 << a_Bit) & packet[a_Offset]) != 0;
+  if (a_Sensor.SetValue(v))
   {
-    Serial.print(name);
-    Serial.print("=");
-    Serial.print(v);
-    Serial.println();
-    current = v;
     ShowValues();
-    // Send in the new binary
-    MyMessage msg(sensor, V_STATUS);
-    send(msg.set(current));
-  }
-}
-
-byte ProcessDataByte(byte value, byte & current, int sensor, char * name)
-{
-  if (value != current)
-  {
-    Serial.print(name);
-    Serial.print("=");
-    Serial.print(value);
-    Serial.println();
-    current = value;
-    ShowValues();
-    // Send in the new binary
-    MyMessage msg(sensor, V_STATUS);
-    send(msg.set(current));
   }
 }
 
@@ -334,8 +312,8 @@ void ParseVaillantTelegram()
       ProcessData2b(11, ta);
       ProcessData1c(13, wt);
       ProcessData1c(14, st);
-      ProcessDataBit(packet[15], 0, heating, SENSOR_HEATING, "H");
-      ProcessDataBit(packet[15], 1, water, SENSOR_HOT_WATER, "W");
+      ProcessDataBit(packet[15], 0, heating);
+      ProcessDataBit(packet[15], 1, water);
     }
     else if (packet[5] == 0x02)
     {
@@ -360,11 +338,11 @@ void ParseVaillantTelegram()
         {
         case 0x00: 
           //Serial.println("hot water circulating pump is off"); 
-          ProcessDataByte(0, hotWaterPump, SENSOR_HOT_WATER_PUMP, "HWP");
+          hotWaterPump.SetValue(0);
           break;
         case 0x64: 
           //Serial.println("hot water circulating pump is on"); 
-          ProcessDataByte(1, hotWaterPump, SENSOR_HOT_WATER_PUMP, "HWP");
+          hotWaterPump.SetValue(1);
           break;
         }
       }
@@ -377,15 +355,15 @@ void ParseVaillantTelegram()
         {
         case 0x00: 
           //Serial.println("internal pump is off"); 
-          ProcessDataByte(0, pump, SENSOR_PUMP, "P");
+          pump.SetValue(0);
           break;
         case 0x64:
           //Serial.println("internal pump is operating in the service water circuit"); 
-          ProcessDataByte(1, pump, SENSOR_PUMP, "P");
+          pump.SetValue(1);
           break;
         case 0xFE: 
           //Serial.println("internal pump is operating in the heating circuit"); 
-          ProcessDataByte(2, pump, SENSOR_PUMP, "P");
+          pump.SetValue(2);
           break;
         }
       }
@@ -461,16 +439,15 @@ void ShowValues()
   Serial.print("(");
   Serial.print(stt.Value(),1);
   Serial.print(")\tH=");
-  Serial.print(heating);
+  Serial.print(heating.Value());
   Serial.print(" W=");
-  Serial.print(water);
+  Serial.print(water.Value());
   Serial.print("\tP=");
-  Serial.print(pump);
+  Serial.print(pump.Value());
   Serial.print(" HWP=");
-  Serial.print(hotWaterPump);
+  Serial.print(hotWaterPump.Value());
   Serial.println("");
 }
-
 
 CSensor::CSensor(byte a_ID, const char * a_Name) :
   m_ID(a_ID),
@@ -519,7 +496,7 @@ float CFloatSensor::Value()
   return m_Value; 
 }
 
-CBitSensor::CBitSensor(byte a_ID, byte a_Type, const char * a_Name)
+CBitSensor::CBitSensor(byte a_ID, byte a_Type, const char * a_Name) :
   CSensor(a_ID, a_Name),
   m_Type(a_Type)
 {
@@ -533,14 +510,40 @@ bool CBitSensor::SetValue(bool a_Value)
     m_Value = a_Value;
     // Send in the new temperature
     MyMessage msg(m_ID, m_Type);
-    send(msg.set(m_Value, 1));
+    send(msg.set(m_Value ? 1 : 0));
     Touch();
     return true;
   }
   return false;
 }
 
-boolCBitSensor:: Value()
+bool CBitSensor::Value()
+{
+  return m_Value;
+}
+
+CByteSensor::CByteSensor(byte a_ID, byte a_Type, const char * a_Name) :
+  CSensor(a_ID, a_Name),
+  m_Type(a_Type)
+{
+  m_Value = 0;
+}
+
+bool CByteSensor::SetValue(const byte a_Value)
+{
+  if ((a_Value != m_Value) || NeedsRefresh())
+  {
+    m_Value = a_Value;
+    // Send in the new temperature
+    MyMessage msg(m_ID, m_Type);
+    send(msg.set(m_Value));
+    Touch();
+    return true;
+  }
+  return false;
+}
+
+byte CByteSensor::Value() const
 {
   return m_Value;
 }
