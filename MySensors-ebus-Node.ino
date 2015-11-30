@@ -40,7 +40,7 @@
 #define SENSOR_EBUS 14
 #define SENSOR_STATE 15
 // TA = Outside temperature
-#define SENSOR_TA 16 
+//#define SENSOR_TA 16 
 #define SENSOR_DT 17
 
 class CSensor
@@ -51,7 +51,7 @@ protected:
   const byte    m_ID;
   const char  * m_Name;
 public:
-  CSensor(byte a_ID, const char * a_Name);
+  CSensor(const byte a_ID, const char * a_Name);
   bool NeedsRefresh();
   void Touch();
 };
@@ -62,9 +62,9 @@ private:
   float m_Value;
   byte  m_Type;
 public:
-  CFloatSensor(byte a_ID, byte a_Type, const char * a_Name);
-  bool SetValue(float a_Value);
-  float Value();
+  CFloatSensor(const byte a_ID, const byte a_Type, const char * a_Name);
+  bool SetValue(const float a_Value);
+  float Value() const;
 };
 
 class CBitSensor: public CSensor
@@ -73,9 +73,9 @@ private:
   bool m_Value;
   byte m_Type;
 public:
-  CBitSensor(byte a_ID, byte a_Type, const char * a_Name);
-  bool SetValue(bool a_Value);
-  bool Value();
+  CBitSensor(const byte a_ID, const byte a_Type, const char * a_Name);
+  bool SetValue(const bool a_Value);
+  bool Value() const;
 };
 
 class CByteSensor: public CSensor
@@ -84,7 +84,7 @@ private:
   bool m_Value;
   byte m_Type;
 public:
-  CByteSensor(byte a_ID, byte a_Type, const char * a_Name);
+  CByteSensor(const byte a_ID, const byte a_Type, const char * a_Name);
   bool SetValue(const byte a_Value);
   byte Value() const;
 };
@@ -109,11 +109,27 @@ CFloatSensor st (SENSOR_ST, V_TEMP, "ST");
 CFloatSensor stt(SENSOR_ST, V_HVAC_SETPOINT_HEAT, "STT");
 CFloatSensor wt (SENSOR_WT, V_TEMP, "WT");
 CFloatSensor wtt(SENSOR_WT, V_HVAC_SETPOINT_HEAT, "WTT");
-CFloatSensor ta (SENSOR_TA, V_TEMP, "TA");
+#ifdef SENSOR_TA
+  CFloatSensor ta (SENSOR_TA, V_TEMP, "TA");
+#endif
 CBitSensor heating(SENSOR_HEATING,   V_STATUS, "H");
 CBitSensor water  (SENSOR_HOT_WATER, V_STATUS, "W");
 CByteSensor pump(SENSOR_PUMP, V_STATUS, "P");
 CByteSensor hotWaterPump(SENSOR_HOT_WATER_PUMP, V_STATUS, "HWP");
+
+char state[MAX_PAYLOAD] = {0};
+
+void CheckState()
+{
+  char newState[MAX_PAYLOAD];
+  sprintf(newState, "%d %d.%d %d.%d", vtt.Value() != 0, heating.Value(), water.Value(), pump.Value(), hotWaterPump.Value());
+  if (strcmp(state, newState) != 0)
+  {
+    strcpy(state, newState);
+    MyMessage msg(SENSOR_STATE, V_TEXT);
+    send(msg.set(state));
+  }
+}
 
 void setup()
 {
@@ -300,6 +316,7 @@ void ParseVaillantTelegram()
     {
       ProcessData1c(7, vtt);
       ProcessData1c(8, stt);
+      CheckState();
     }
   }
   else if (packet[3] == 0x11)
@@ -309,11 +326,14 @@ void ParseVaillantTelegram()
       Serial.println(F("Vaillant Burner Control Unit - block 1")); 
       ProcessData1c(9, vt);
       ProcessData1c(10, nt);
+#ifdef SENSOR_TA      
       ProcessData2b(11, ta);
+#endif
       ProcessData1c(13, wt);
       ProcessData1c(14, st);
       ProcessDataBit(packet[15], 0, heating);
       ProcessDataBit(packet[15], 1, water);
+      CheckState();
     }
     else if (packet[5] == 0x02)
     {
@@ -338,11 +358,11 @@ void ParseVaillantTelegram()
         {
         case 0x00: 
           //Serial.println("hot water circulating pump is off"); 
-          hotWaterPump.SetValue(0);
+          if (hotWaterPump.SetValue(0)) CheckState();
           break;
         case 0x64: 
           //Serial.println("hot water circulating pump is on"); 
-          hotWaterPump.SetValue(1);
+          if (hotWaterPump.SetValue(1)) CheckState();
           break;
         }
       }
@@ -355,15 +375,15 @@ void ParseVaillantTelegram()
         {
         case 0x00: 
           //Serial.println("internal pump is off"); 
-          pump.SetValue(0);
+          if (pump.SetValue(0)) CheckState();
           break;
         case 0x64:
           //Serial.println("internal pump is operating in the service water circuit"); 
-          pump.SetValue(1);
+          if (pump.SetValue(1)) CheckState();
           break;
         case 0xFE: 
           //Serial.println("internal pump is operating in the heating circuit"); 
-          pump.SetValue(2);
+          if (pump.SetValue(2)) CheckState();
           break;
         }
       }
@@ -470,14 +490,14 @@ void CSensor::Touch()
   m_Millis = millis();
 }
 
-CFloatSensor::CFloatSensor(byte a_ID, byte a_Type, const char * a_Name) :
+CFloatSensor::CFloatSensor(const byte a_ID, const byte a_Type, const char * a_Name) :
   CSensor(a_ID, a_Name),
   m_Type(a_Type)
 {
   m_Value = 0;
 }
 
-bool CFloatSensor::SetValue(float a_Value)
+bool CFloatSensor::SetValue(const float a_Value)
 {
   if ((a_Value != m_Value) || NeedsRefresh())
   {
@@ -491,19 +511,19 @@ bool CFloatSensor::SetValue(float a_Value)
   return false;
 }
 
-float CFloatSensor::Value()
+float CFloatSensor::Value() const
 {
   return m_Value; 
 }
 
-CBitSensor::CBitSensor(byte a_ID, byte a_Type, const char * a_Name) :
+CBitSensor::CBitSensor(const byte a_ID, const byte a_Type, const char * a_Name) :
   CSensor(a_ID, a_Name),
   m_Type(a_Type)
 {
   m_Value = false;
 }
 
-bool CBitSensor::SetValue(bool a_Value)
+bool CBitSensor::SetValue(const bool a_Value)
 {
   if ((a_Value != m_Value) || NeedsRefresh())
   {
@@ -517,12 +537,12 @@ bool CBitSensor::SetValue(bool a_Value)
   return false;
 }
 
-bool CBitSensor::Value()
+bool CBitSensor::Value() const
 {
   return m_Value;
 }
 
-CByteSensor::CByteSensor(byte a_ID, byte a_Type, const char * a_Name) :
+CByteSensor::CByteSensor(const byte a_ID, const byte a_Type, const char * a_Name) :
   CSensor(a_ID, a_Name),
   m_Type(a_Type)
 {
