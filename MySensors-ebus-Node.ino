@@ -125,7 +125,9 @@ void CheckState()
   sprintf(newState, "%d %d.%d %d.%d", vtt.Value() != 0, heating.Value(), water.Value(), pump.Value(), hotWaterPump.Value());
   if (strcmp(state, newState) != 0)
   {
+    Serial.print("State change: ");
     strcpy(state, newState);
+    Serial.println(state);
     MyMessage msg(SENSOR_STATE, V_TEXT);
     send(msg.set(state));
   }
@@ -148,12 +150,14 @@ void presentation()
   present(SENSOR_NT, S_TEMP, "NT");
   present(SENSOR_WT, S_HEATER, "WT");
   present(SENSOR_ST, S_HEATER, "ST");
-  present(SENSOR_HEATING, S_BINARY);
-  present(SENSOR_HOT_WATER, S_BINARY);
-  present(SENSOR_MODEL, S_CUSTOM);
-  present(SENSOR_EBUS, S_CUSTOM);
-  present(SENSOR_STATE, S_CUSTOM);
-  present(SENSOR_DT, S_CUSTOM);
+  present(SENSOR_HEATING, S_BINARY, "H");
+  present(SENSOR_HOT_WATER, S_BINARY, "HW");
+  present(SENSOR_MODEL, S_CUSTOM, "MODEL");
+  present(SENSOR_EBUS, S_CUSTOM, "EBUS");
+  present(SENSOR_STATE, S_CUSTOM, "State");
+  present(SENSOR_DT, S_CUSTOM, "DT");
+  present(SENSOR_PUMP, S_CUSTOM, "P");
+  present(SENSOR_HOT_WATER_PUMP, S_CUSTOM, "HWP");
 }
 
 void ProcessData2b(const byte a_Offset, CFloatSensor & a_Sensor)
@@ -261,9 +265,7 @@ void loop() // run over and over
           {
             Serial.print(F("Identification: "));
             char model[MAX_PAYLOAD];
-            strcpy(model, "Vaillant ");
-            strncat(model, (char*)&packet[9], 5);
-            sprintf(&model[strlen(model)], " %x.%x/%x.%x", packet[16], packet[17], packet[14], packet[15]);
+            sprintf(model, " %x.%x/%x.%x", packet[16], packet[17], packet[14], packet[15]);
             Serial.println(model);
             
             MyMessage msg(SENSOR_MODEL, V_TEXT);
@@ -478,7 +480,7 @@ CSensor::CSensor(byte a_ID, const char * a_Name) :
 bool CSensor::NeedsRefresh()
 {
   unsigned long now = millis();
-  if ((m_Millis - now) > REFRESH_INTERVAL)
+  if ((now - m_Millis) > REFRESH_INTERVAL)
   {
     return true;
   };
@@ -499,7 +501,7 @@ CFloatSensor::CFloatSensor(const byte a_ID, const byte a_Type, const char * a_Na
 
 bool CFloatSensor::SetValue(const float a_Value)
 {
-  if ((a_Value != m_Value) || NeedsRefresh())
+  if ((abs(a_Value - m_Value) > 1.0) || NeedsRefresh())
   {
     m_Value = a_Value;
     // Send in the new temperature
