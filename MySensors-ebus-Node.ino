@@ -7,6 +7,7 @@
 #include <SoftwareSerial.h>
 #include "crc8.h"
 #include <Time.h>
+#include <TimerOne.h>
 
 /*
   Vaillant energy bus sensor node
@@ -15,8 +16,11 @@
  */
 
 #define NODE_TEXT     "VaillantEnergyBus"
-#define NODE_VERSION  "1.1"
+#define NODE_VERSION  "1.2 beat"
 
+// eBus+ ---- ANALOG_PIN => ebus() => DIGITAL_PIN --- RECEIVE_PIN => SoftwareSerial
+#define ANALOG_PIN
+#define DIGITAL_PIN
 #define RECEIVE_PIN   A0
 #define TRANSMIT_PIN  11
 #define REFRESH_INTERVAL 300000 // Every five minutes
@@ -148,8 +152,17 @@ void setup()
 {
   // setSyncProvider( RequestSync);  //set function to call when sync required
   
+  Timer1.initialize(10); // every 10 us (microseconds)
+  Timer1.attachInterrupt(ebus);
   // set the data rate for the SoftwareSerial port
   mySerial.begin(2400);
+}
+
+void ebus(void)
+{
+  int value = analogRead(A0);
+  if (value > 532) digitalWrite(x, HIGH);
+  if (value < 430) digitalWrite(x, LOW);
 }
 
 void presentation()
