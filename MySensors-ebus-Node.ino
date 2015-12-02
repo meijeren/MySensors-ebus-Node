@@ -288,137 +288,162 @@ static inline byte Bcd2Dec(byte hex)
   return ((hex & 0xF0) >> 4) * 10 + (hex & 0x0F);
 }
 
+void ParseVaillantTelegram04()
+{
+  if (packet[5] == 0x01)
+  {
+    if (packetBytes >= 11)
+    {
+        Serial.print(F("Vaillant Get Operating Mode: TV")); 
+        Serial.print(packet[9], HEX);
+        Serial.print(F(" op.mode="));
+        Serial.println(packet[10], HEX);
+    }
+  }
+  else if (packet[5] == 0x00)
+  {
+    Serial.println(F("Vaillant Get Operational Data - DCF date/time"));
+  }
+  else
+  {
+    Serial.println(F("Vaillant Get Operational Data - unhandled block"));
+  }
+}
+
+void ParseVaillantTelegram10()
+{
+  Serial.println(F("Vaillant Room Controller: ")); 
+  if (packetBytes >= 16)
+  {
+    ProcessData1c(7, vtt);
+    ProcessData1c(8, stt);
+    CheckState();
+  }
+}
+
+void ParseVaillantTelegram11()
+{
+  if (packet[5] == 0x01)
+  {
+    Serial.println(F("Vaillant Burner Control Unit - block 1")); 
+    ProcessData1c(9, vt);
+    ProcessData1c(10, nt);
+#ifdef SENSOR_TA      
+    ProcessData2b(11, ta);
+#endif
+    ProcessData1c(13, wt);
+    ProcessData1c(14, st);
+    ProcessDataBit(packet[15], 0, heating);
+    ProcessDataBit(packet[15], 1, water);
+    CheckState();
+  }
+  else if (packet[5] == 0x02)
+  {
+    Serial.println(F("Vaillant Burner Control Unit - block 2")); 
+    ProcessData1c(13, wtt);
+  }
+  else
+  {
+    Serial.println(F("Vaillant Burner Control Unit - unhandled block"));
+  }
+}
+
+void ParseVaillantTelegram12()
+{
+  Serial.println(F("Vaillant pump"));
+  if ((packet[0] == 0x10) && (packet[1] == 0x08))
+  {
+    // Heater controller
+    //ProcessDataBit(packet[6], 7, hwcp, SENSOR_HWCP, "HWCP");
+    if (packet[5] == 0x00)
+    {
+      switch (packet[6])
+      {
+      case 0x00: 
+        //Serial.println("hot water circulating pump is off"); 
+        if (hotWaterPump.SetValue(0)) CheckState();
+        break;
+      case 0x64: 
+        //Serial.println("hot water circulating pump is on"); 
+        if (hotWaterPump.SetValue(1)) CheckState();
+        break;
+      }
+    }
+  }
+  if ((packet[0] == 0x03) && (packet[1] == 0x64))
+  {
+    if (packet[5] == 0x02)
+    {
+      switch (packet[6])
+      {
+      case 0x00: 
+        //Serial.println("internal pump is off"); 
+        if (pump.SetValue(0)) CheckState();
+        break;
+      case 0x64:
+        //Serial.println("internal pump is operating in the service water circuit"); 
+        if (pump.SetValue(1)) CheckState();
+        break;
+      case 0xFE: 
+        //Serial.println("internal pump is operating in the heating circuit"); 
+        if (pump.SetValue(2)) CheckState();
+        break;
+      }
+    }
+  }
+}
+
+void ParseVaillantTelegram16()
+{
+  if (packet[5] == 0x00)
+  {
+    Serial.print(F("Vaillant Broadcast Service - date / time "));
+    char buffer[20] = {0}; 
+    snprintf(buffer, sizeof(buffer), "20%02x-%02x-%02x %02x:%02x:%02x", packet[12], packet[10], packet[9], packet[8], packet[7], packet[6]);
+    Serial.println(buffer); 
+    tmElements_t t;
+    t.Year = 2000 + Bcd2Dec(packet[12]);
+    t.Month = Bcd2Dec(packet[10]);
+    t.Day = Bcd2Dec(packet[9]);
+    t.Hour = Bcd2Dec(packet[8]);
+    t.Minute = Bcd2Dec(packet[7]);
+    t.Second = Bcd2Dec(packet[6]);
+    time_t unix = makeTime(t);
+    /* low level functions to convert to and from system time                     */
+/*void breakTime(time_t time, tmElements_t &tm);  // break time_t into elements
+time_t makeTime(tmElements_t &tm);  // convert time elements into time_t*/
+    
+    MyMessage msg(SENSOR_DT, V_TEXT);
+    send(msg.set(buffer));
+    
+  }
+  else if (packet[5] == 0x01)
+  {
+    Serial.println(F("Vaillant broadcast service"));
+  }
+}
+
 void ParseVaillantTelegram()
 {
   if (packet[3] == 0x04)
   {
-    if (packet[5] == 0x01)
-    {
-      if (packetBytes >= 11)
-      {
-          Serial.print(F("Vaillant Get Operating Mode: TV")); 
-          Serial.print(packet[9], HEX);
-          Serial.print(F(" op.mode="));
-          Serial.println(packet[10], HEX);
-      }
-    }
-    else if (packet[5] == 0x00)
-    {
-      Serial.println(F("Vaillant Get Operational Data - DCF date/time"));
-    }
-    else
-    {
-      Serial.println(F("Vaillant Get Operational Data - unhandled block"));
-    }
+    ParseVaillantTelegram04();
   }
   else if (packet[3] == 0x10)
   {
-    Serial.println(F("Vaillant Room Controller: ")); 
-    if (packetBytes >= 16)
-    {
-      ProcessData1c(7, vtt);
-      ProcessData1c(8, stt);
-      CheckState();
-    }
+    ParseVaillantTelegram10();
   }
   else if (packet[3] == 0x11)
   {
-    if (packet[5] == 0x01)
-    {
-      Serial.println(F("Vaillant Burner Control Unit - block 1")); 
-      ProcessData1c(9, vt);
-      ProcessData1c(10, nt);
-#ifdef SENSOR_TA      
-      ProcessData2b(11, ta);
-#endif
-      ProcessData1c(13, wt);
-      ProcessData1c(14, st);
-      ProcessDataBit(packet[15], 0, heating);
-      ProcessDataBit(packet[15], 1, water);
-      CheckState();
-    }
-    else if (packet[5] == 0x02)
-    {
-      Serial.println(F("Vaillant Burner Control Unit - block 2")); 
-      ProcessData1c(13, wtt);
-    }
-    else
-    {
-      Serial.println(F("Vaillant Burner Control Unit - unhandled block"));
-    }
+    ParseVaillantTelegram11();
   }
   else if (packet[3] == 0x12)
   {
-    Serial.println(F("Vaillant pump"));
-    if ((packet[0] == 0x10) && (packet[1] == 0x08))
-    {
-      // Heater controller
-      //ProcessDataBit(packet[6], 7, hwcp, SENSOR_HWCP, "HWCP");
-      if (packet[5] == 0x00)
-      {
-        switch (packet[6])
-        {
-        case 0x00: 
-          //Serial.println("hot water circulating pump is off"); 
-          if (hotWaterPump.SetValue(0)) CheckState();
-          break;
-        case 0x64: 
-          //Serial.println("hot water circulating pump is on"); 
-          if (hotWaterPump.SetValue(1)) CheckState();
-          break;
-        }
-      }
-    }
-    if ((packet[0] == 0x03) && (packet[1] == 0x64))
-    {
-      if (packet[5] == 0x02)
-      {
-        switch (packet[6])
-        {
-        case 0x00: 
-          //Serial.println("internal pump is off"); 
-          if (pump.SetValue(0)) CheckState();
-          break;
-        case 0x64:
-          //Serial.println("internal pump is operating in the service water circuit"); 
-          if (pump.SetValue(1)) CheckState();
-          break;
-        case 0xFE: 
-          //Serial.println("internal pump is operating in the heating circuit"); 
-          if (pump.SetValue(2)) CheckState();
-          break;
-        }
-      }
-    }
+    ParseVaillantTelegram12();
   }
   else if (packet[3] == 0x16)
   {
-    if (packet[5] == 0x00)
-    {
-      Serial.print(F("Vaillant Broadcast Service - date / time "));
-      char buffer[20] = {0}; 
-      snprintf(buffer, sizeof(buffer), "20%02x-%02x-%02x %02x:%02x:%02x", packet[12], packet[10], packet[9], packet[8], packet[7], packet[6]);
-      Serial.println(buffer); 
-      tmElements_t t;
-      t.Year = 2000 + Bcd2Dec(packet[12]);
-      t.Month = Bcd2Dec(packet[10]);
-      t.Day = Bcd2Dec(packet[9]);
-      t.Hour = Bcd2Dec(packet[8]);
-      t.Minute = Bcd2Dec(packet[7]);
-      t.Second = Bcd2Dec(packet[6]);
-      time_t unix = makeTime(t);
-      /* low level functions to convert to and from system time                     */
-/*void breakTime(time_t time, tmElements_t &tm);  // break time_t into elements
-time_t makeTime(tmElements_t &tm);  // convert time elements into time_t*/
-      
-      MyMessage msg(SENSOR_DT, V_TEXT);
-      send(msg.set(buffer));
-      
-    }
-    else if (packet[5] == 0x01)
-    {
-      Serial.println(F("Vaillant broadcast service"));
-    }
+    ParseVaillantTelegram16();
   }
   else
   {
