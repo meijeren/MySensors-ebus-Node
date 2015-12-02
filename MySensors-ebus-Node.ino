@@ -310,6 +310,11 @@ void ParseVaillantTelegram04()
   }
 }
 
+void ParseVaillantTelegram09()
+{
+  Serial.println(F("Vaillant 09: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ")); 
+}
+
 void ParseVaillantTelegram10()
 {
   Serial.println(F("Vaillant Room Controller: ")); 
@@ -425,35 +430,22 @@ time_t makeTime(tmElements_t &tm);  // convert time elements into time_t*/
 
 void ParseVaillantTelegram()
 {
-  if (packet[3] == 0x04)
+  switch (packet[3])
   {
-    ParseVaillantTelegram04();
-  }
-  else if (packet[3] == 0x10)
-  {
-    ParseVaillantTelegram10();
-  }
-  else if (packet[3] == 0x11)
-  {
-    ParseVaillantTelegram11();
-  }
-  else if (packet[3] == 0x12)
-  {
-    ParseVaillantTelegram12();
-  }
-  else if (packet[3] == 0x16)
-  {
-    ParseVaillantTelegram16();
-  }
-  else
-  {
-    Serial.println(F("unhandled Vaillant telegram"));
+    case 0x04: ParseVaillantTelegram04(); break;
+    case 0x09: ParseVaillantTelegram09(); break;
+    case 0x10: ParseVaillantTelegram10(); break;
+    case 0x11: ParseVaillantTelegram11(); break;
+    case 0x12: ParseVaillantTelegram12(); break;
+    case 0x16: ParseVaillantTelegram16(); break;
+    default:
+      Serial.println(F("unhandled Vaillant telegram"));
   }
 }
 
 void ReconstructTelegram()
 {
-  for (int i=0;i<packetBytes;i++)
+  for (int i = 0; i < packetBytes; i++)
   {
     if (packet[i] == 0xA9)
     {
