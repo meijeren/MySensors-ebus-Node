@@ -118,14 +118,25 @@ CByteSensor pump(SENSOR_PUMP, V_STATUS, "P");
 CByteSensor hotWaterPump(SENSOR_HOT_WATER_PUMP, V_STATUS, "HWP");
 
 char state[MAX_PAYLOAD] = {0};
+unsigned long stateMillis = 0;
 
 void CheckState()
 {
   char newState[MAX_PAYLOAD];
   sprintf(newState, "%d %d.%d %d.%d", vtt.Value() != 0, heating.Value(), water.Value(), pump.Value(), hotWaterPump.Value());
+  bool sendState = false;
   if (strcmp(state, newState) != 0)
   {
     Serial.print("State change: ");
+    sendState = true;
+  }
+  else if ((now - stateMillis) >= 60000)
+  {
+    Serial.print("State resend: ");
+    sendState = true;
+  }
+  if (sendState)
+  {
     strcpy(state, newState);
     Serial.println(state);
     MyMessage msg(SENSOR_STATE, V_TEXT);
