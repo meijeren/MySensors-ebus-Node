@@ -19,8 +19,8 @@
 #define NODE_VERSION  "1.2 beat"
 
 // eBus+ ---- ANALOG_PIN => ebus() => DIGITAL_PIN --- RECEIVE_PIN => SoftwareSerial
-#define ANALOG_PIN
-#define DIGITAL_PIN
+#define ANALOG_PIN    4
+#define DIGITAL_PIN   5
 #define RECEIVE_PIN   A0
 #define TRANSMIT_PIN  11
 #define REFRESH_INTERVAL 300000 // Every five minutes
@@ -134,7 +134,7 @@ void CheckState()
     Serial.print("State change: ");
     sendState = true;
   }
-  else if ((now - stateMillis) >= 60000)
+  else if ((millis() - stateMillis) >= 60000)
   {
     Serial.print("State resend: ");
     sendState = true;
@@ -145,13 +145,14 @@ void CheckState()
     Serial.println(state);
     MyMessage msg(SENSOR_STATE, V_TEXT);
     send(msg.set(state));
+    stateMillis = millis();
   }
 }
 
 void setup()
 {
   // setSyncProvider( RequestSync);  //set function to call when sync required
-  
+  pinMode(DIGITAL_PIN, OUTPUT);
   Timer1.initialize(10); // every 10 us (microseconds)
   Timer1.attachInterrupt(ebus);
   // set the data rate for the SoftwareSerial port
@@ -160,9 +161,9 @@ void setup()
 
 void ebus(void)
 {
-  int value = analogRead(A0);
-  if (value > 532) digitalWrite(x, HIGH);
-  if (value < 430) digitalWrite(x, LOW);
+  int value = analogRead(ANALOG_PIN);
+  if (value > 532) digitalWrite(DIGITAL_PIN, HIGH);
+  if (value < 430) digitalWrite(DIGITAL_PIN, LOW);
 }
 
 void presentation()
