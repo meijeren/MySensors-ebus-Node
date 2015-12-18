@@ -1,13 +1,12 @@
 #define MY_NODE_ID       0xB5
 #define MY_RADIO_NRF24
-#define MY_DEBUG
+//#define MY_DEBUG
 
 #include <MySensor.h>
 #include <SPI.h>
 #include <SoftwareSerial.h>
 #include "crc8.h"
 #include <Time.h>
-#include <TimerOne.h>
 
 /*
   Vaillant energy bus sensor node
@@ -16,7 +15,7 @@
  */
 
 #define NODE_TEXT     "VaillantEnergyBus"
-#define NODE_VERSION  "1.2 beat"
+#define NODE_VERSION  "1.3 beta"
 
 // eBus+ ---- ANALOG_PIN => ebus() => DIGITAL_PIN --- RECEIVE_PIN => SoftwareSerial
 #define ANALOG_PIN    4
@@ -153,17 +152,8 @@ void setup()
 {
   // setSyncProvider( RequestSync);  //set function to call when sync required
   pinMode(DIGITAL_PIN, OUTPUT);
-  Timer1.initialize(10); // every 10 us (microseconds)
-  Timer1.attachInterrupt(ebus);
   // set the data rate for the SoftwareSerial port
   mySerial.begin(2400);
-}
-
-void ebus(void)
-{
-  int value = analogRead(ANALOG_PIN);
-  if (value > 532) digitalWrite(DIGITAL_PIN, HIGH);
-  if (value < 430) digitalWrite(DIGITAL_PIN, LOW);
 }
 
 void presentation()
@@ -247,9 +237,14 @@ void loop() // run over and over
     {
       packet[packetBytes] = data;
       packetBytes++;
-      if (data <= 0xF) Serial.print(" ");
+      if (data <= 0xF) Serial.print("0");
       Serial.print(data, HEX);
       Serial.print(" ");
+      if (packetBytes > 4)
+      {
+        byte length = packet[4];
+        if (packetBytes == (6 + length)) Serial.print("# ");
+      }
     }
     else 
     {
@@ -290,17 +285,16 @@ void loop() // run over and over
           {
             Serial.print(F("Identification: "));
             char model[MAX_PAYLOAD];
-            sprintf(model, " %x.%x/%x.%x", packet[16], packet[17], packet[14], packet[15]);
+            sprintf(model, "HW %u.%u SW %u.%u", packet[16], packet[17], packet[14], packet[15]);
             Serial.println(model);
             
             MyMessage msg(SENSOR_MODEL, V_TEXT);
             send(msg.set(model));
-            
           }
         }
         else 
         {
-          Serial.println(F("Unhandled telegram"));
+          Serial.println(F("=== Unhandled telegram ===   ===   ===   ===   ==="));
         }
         packetBytes = 0;
       }
@@ -313,42 +307,13 @@ static inline byte Bcd2Dec(byte hex)
   return ((hex & 0xF0) >> 4) * 10 + (hex & 0x0F);
 }
 
-void ParseVaillantTelegram04()
-{
-  if (packet[5] == 0x01)
-  {
-    if (packetBytes >= 11)
-    {
-        Serial.print(F("Vaillant Get Operating Mode: TV")); 
-        Serial.print(packet[9], HEX);
-        Serial.print(F(" op.mode="));
-        Serial.println(packet[10], HEX);
-    }
-  }
-  else if (packet[5] == 0x00)
-  {
-    Serial.println(F("Vaillant Get Operational Data - DCF date/time"));
-  }
-  else
-  {
-    Serial.println(F("Vaillant Get Operational Data - unhandled block"));
-  }
-}
+
+
+
 
 void ParseVaillantTelegram09()
 {
   Serial.println(F("Vaillant 09: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ")); 
-}
-
-void ParseVaillantTelegram10()
-{
-  Serial.println(F("Vaillant Room Controller: ")); 
-  if (packetBytes >= 16)
-  {
-    ProcessData1c(7, vtt);
-    ProcessData1c(8, stt);
-    CheckState();
-  }
 }
 
 void ParseVaillantTelegram11()
@@ -420,51 +385,32 @@ void ParseVaillantTelegram12()
         break;
       }
     }
+    if (packet[5] == 0x03)
+    {
+      if (packet[6] == 0x00)
+      {
+        Serial.println(F("internal pump is disabled due to error condition"));
+        if (pump.SetValue(4)) CheckState();
+      }
+    }
   }
 }
 
-void ParseVaillantTelegram16()
-{
-  if (packet[5] == 0x00)
-  {
-    Serial.print(F("Vaillant Broadcast Service - date / time "));
-    char buffer[20] = {0}; 
-    snprintf(buffer, sizeof(buffer), "20%02x-%02x-%02x %02x:%02x:%02x", packet[12], packet[10], packet[9], packet[8], packet[7], packet[6]);
-    Serial.println(buffer); 
-    tmElements_t t;
-    t.Year = 2000 + Bcd2Dec(packet[12]);
-    t.Month = Bcd2Dec(packet[10]);
-    t.Day = Bcd2Dec(packet[9]);
-    t.Hour = Bcd2Dec(packet[8]);
-    t.Minute = Bcd2Dec(packet[7]);
-    t.Second = Bcd2Dec(packet[6]);
-    time_t unix = makeTime(t);
-    /* low level functions to convert to and from system time                     */
-/*void breakTime(time_t time, tmElements_t &tm);  // break time_t into elements
-time_t makeTime(tmElements_t &tm);  // convert time elements into time_t*/
-    
-    MyMessage msg(SENSOR_DT, V_TEXT);
-    send(msg.set(buffer));
-    
-  }
-  else if (packet[5] == 0x01)
-  {
-    Serial.println(F("Vaillant broadcast service"));
-  }
-}
 
 void ParseVaillantTelegram()
 {
   switch (packet[3])
   {
     case 0x04: ParseVaillantTelegram04(); break;
+    case 0x05: ParseVaillantTelegram05(); break;
     case 0x09: ParseVaillantTelegram09(); break;
     case 0x10: ParseVaillantTelegram10(); break;
     case 0x11: ParseVaillantTelegram11(); break;
     case 0x12: ParseVaillantTelegram12(); break;
+    case 0x13: ParseVaillantTelegram13(); break;
     case 0x16: ParseVaillantTelegram16(); break;
     default:
-      Serial.println(F("unhandled Vaillant telegram"));
+      Serial.println(F("/////////////////////////// unhandled Vaillant telegram \\\\\\\\\\\\\\\\\\\\\\\\"));
   }
 }
 
