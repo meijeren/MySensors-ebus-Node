@@ -15,14 +15,14 @@
  */
 
 #define NODE_TEXT     "VaillantEnergyBus"
-#define NODE_VERSION  "1.4 beta"
+#define NODE_VERSION  "1.5 beta"
 
 // eBus+ ---- ANALOG_PIN => ebus() => DIGITAL_PIN --- RECEIVE_PIN => SoftwareSerial
 #define ANALOG_PIN    4
 #define DIGITAL_PIN   5
 #define RECEIVE_PIN   A0
 #define TRANSMIT_PIN  11
-#define REFRESH_INTERVAL 300000 // Every five minutes
+#define REFRESH_INTERVAL 30000//0 // Every five minutes
 
 // todo: omschrijven naar HVAC:
 // S_HVAC, // Thermostat/HVAC device. V_HVAC_SETPOINT_HEAT, V_HVAC_SETPOINT_COLD, V_HVAC_FLOW_STATE, V_HVAC_FLOW_MODE, V_TEMP
@@ -54,10 +54,12 @@ private:
 protected:
   const byte    m_ID;
   const char  * m_Name;
+  virtual void SendValue() = 0;
 public:
   CSensor(const byte a_ID, const char * a_Name);
   bool NeedsRefresh();
   void Touch();
+  bool Refresh();
 };
 
 class CFloatSensor: public CSensor
@@ -65,6 +67,8 @@ class CFloatSensor: public CSensor
 private:
   float m_Value;
   byte  m_Type;
+protected:
+  virtual void SendValue();
 public:
   CFloatSensor(const byte a_ID, const byte a_Type, const char * a_Name);
   bool SetValue(const float a_Value);
@@ -76,6 +80,8 @@ class CBitSensor: public CSensor
 private:
   bool m_Value;
   byte m_Type;
+protected:
+  virtual void SendValue();
 public:
   CBitSensor(const byte a_ID, const byte a_Type, const char * a_Name);
   bool SetValue(const bool a_Value);
@@ -87,6 +93,8 @@ class CByteSensor: public CSensor
 private:
   bool m_Value;
   byte m_Type;
+protected:
+  virtual void SendValue();
 public:
   CByteSensor(const byte a_ID, const byte a_Type, const char * a_Name);
   bool SetValue(const byte a_Value);
@@ -303,6 +311,24 @@ void loop() // run over and over
       }
     }
   }
+  else
+  {
+    if (vt.Refresh()) return;
+    if (vtt.Refresh()) return;
+    if (nt.Refresh()) return;
+    if (st.Refresh()) return;
+    if (stt.Refresh()) return;
+    if (wt.Refresh()) return;
+    if (wtt.Refresh()) return;
+#ifdef SENSOR_TA
+    if (ta.Refresh()) return;
+#endif
+    if (heating.Refresh()) return;
+    if (water.Refresh()) return;
+    if (pump.Refresh()) return;
+    if (hotWaterPump.Refresh()) return;
+    if (sensor5.Refresh()) return;
+  }
 }
 
 static inline byte Bcd2Dec(byte hex)
@@ -478,6 +504,17 @@ bool CSensor::NeedsRefresh()
   return false;
 }
 
+bool CSensor::Refresh()
+{
+  if (NeedsRefresh())
+  {
+    SendValue();
+    Touch();
+    return true;
+  }
+  return false;
+}
+
 void CSensor::Touch()
 {
   m_Millis = millis();
@@ -490,14 +527,19 @@ CFloatSensor::CFloatSensor(const byte a_ID, const byte a_Type, const char * a_Na
   m_Value = 0;
 }
 
+void CFloatSensor::SendValue()
+{
+  // Send in the new temperature
+  MyMessage msg(m_ID, m_Type);
+  send(msg.set(m_Value, 1));
+}
+
 bool CFloatSensor::SetValue(const float a_Value)
 {
-  if ((abs(a_Value - m_Value) > 1.0) || NeedsRefresh())
+  if (abs(a_Value - m_Value) > 1.0)
   {
     m_Value = a_Value;
-    // Send in the new temperature
-    MyMessage msg(m_ID, m_Type);
-    send(msg.set(m_Value, 1));
+    SendValue();
     Touch();
     return true;
   }
@@ -516,14 +558,19 @@ CBitSensor::CBitSensor(const byte a_ID, const byte a_Type, const char * a_Name) 
   m_Value = false;
 }
 
+void CBitSensor::SendValue()
+{
+  // Send in the new temperature
+  MyMessage msg(m_ID, m_Type);
+  send(msg.set(m_Value ? 1 : 0));
+}
+
 bool CBitSensor::SetValue(const bool a_Value)
 {
-  if ((a_Value != m_Value) || NeedsRefresh())
+  if (a_Value != m_Value)
   {
     m_Value = a_Value;
-    // Send in the new temperature
-    MyMessage msg(m_ID, m_Type);
-    send(msg.set(m_Value ? 1 : 0));
+    SendValue();
     Touch();
     return true;
   }
@@ -542,14 +589,19 @@ CByteSensor::CByteSensor(const byte a_ID, const byte a_Type, const char * a_Name
   m_Value = 0;
 }
 
+void CByteSensor::SendValue()
+{
+  // Send in the new temperature
+  MyMessage msg(m_ID, m_Type);
+  send(msg.set(m_Value));
+}
+
 bool CByteSensor::SetValue(const byte a_Value)
 {
-  if ((a_Value != m_Value) || NeedsRefresh())
+  if (a_Value != m_Value)
   {
     m_Value = a_Value;
-    // Send in the new temperature
-    MyMessage msg(m_ID, m_Type);
-    send(msg.set(m_Value));
+    SendValue();
     Touch();
     return true;
   }
