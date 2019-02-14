@@ -5,6 +5,7 @@ void ParseVaillantTelegram13()
   {
     Serial.print(F("Vaillant 13h - "));
     Serial.println(packet[5], HEX);
+    sensor5.SetValue(packet[5]);
   }
   else
   {

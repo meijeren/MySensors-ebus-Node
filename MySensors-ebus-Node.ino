@@ -2,11 +2,11 @@
 #define MY_RADIO_NRF24
 //#define MY_DEBUG
 
-#include <MySensor.h>
+#include <MySensors.h>
 #include <SPI.h>
 #include <SoftwareSerial.h>
 #include "crc8.h"
-#include <Time.h>
+#include <TimeLib.h>
 
 /*
   Vaillant energy bus sensor node
@@ -15,7 +15,7 @@
  */
 
 #define NODE_TEXT     "VaillantEnergyBus"
-#define NODE_VERSION  "1.3 beta"
+#define NODE_VERSION  "1.4 beta"
 
 // eBus+ ---- ANALOG_PIN => ebus() => DIGITAL_PIN --- RECEIVE_PIN => SoftwareSerial
 #define ANALOG_PIN    4
@@ -45,6 +45,7 @@
 // TA = Outside temperature
 //#define SENSOR_TA 16 
 #define SENSOR_DT 17
+#define SENSOR_5 5
 
 class CSensor
 {
@@ -119,6 +120,7 @@ CBitSensor heating(SENSOR_HEATING,   V_STATUS, "H");
 CBitSensor water  (SENSOR_HOT_WATER, V_STATUS, "W");
 CByteSensor pump(SENSOR_PUMP, V_STATUS, "P");
 CByteSensor hotWaterPump(SENSOR_HOT_WATER_PUMP, V_STATUS, "HWP");
+CByteSensor sensor5(SENSOR_5, V_STATUS, "5");
 
 char state[MAX_PAYLOAD] = {0};
 unsigned long stateMillis = 0;
@@ -173,6 +175,7 @@ void presentation()
   present(SENSOR_DT, S_CUSTOM, "DT");
   present(SENSOR_PUMP, S_CUSTOM, "P");
   present(SENSOR_HOT_WATER_PUMP, S_CUSTOM, "HWP");
+  present(SENSOR_5, S_CUSTOM, "5");
 }
 
 void ProcessData2b(const byte a_Offset, CFloatSensor & a_Sensor)
